@@ -99,4 +99,8 @@ installs as a separate app; the original Hermes Agent is left untouched.
 
 ## Provenance
 
-Derived from `Futahua/apers-android-src` @ `47e332c1829de641649fcd08ebbca9d1690913e7`.
+Originally derived from the apktool project `Futahua/apers-android-src`
+@ `47e332c1829de641649fcd08ebbca9d1690913e7` (now retired — this repo supersedes and
+fully contains it). Human-readable decompiled Java of the same app is preserved under
+[`reference/decompiled-java/`](reference/decompiled-java/) (folded in from the former
+`Futahua/hermes-agent-android`, also retired). This is now the single source of truth.

@@ -148,7 +148,10 @@ Phone (this repo, smali):
 - `smali_classes3/com/hermes/android/MainActivityKt$MeshScreen$2$1$3.smali` — the
   paste-command UI; `$2$1$2.smali` — the companion GitHub link.
 - `smali_classes2/com/hermes/android/handoff/` — `HandoffClient`, `HandoffController`,
-  `HandoffCrypto`, `HandoffDiscovery` (the protocol client).
+  `HandoffCrypto`, `HandoffDiscovery` (the protocol client, as smali).
+- **Readable decompiled Java of the same classes** (much easier to read):
+  `reference/decompiled-java/app/src/main/java/com/hermes/android/handoff/*.java`
+  (`HandoffCrypto.java`, `HandoffDiscovery.java`, `HandoffController.java`, ...).
 - `assets/handoff/handoff_core.py|handoff_export.py|handoff_import.py` — bundle format.
 - `res/values/strings.xml` — `mesh_*`, `handoff_*`, `settings_handoff_desc`.
 

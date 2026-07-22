@@ -38,8 +38,8 @@ it installs **alongside** the original Hermes Agent app (`com.hermesagent.androi
 
 | | |
 |---|---|
-| Repository | https://github.com/Futahua/apers-android-src |
-| Commit | `47e332c1829de641649fcd08ebbca9d1690913e7` (only commit on `main`) |
+| Repository | `Futahua/apers-android-src` (retired; superseded by and fully contained in this repo) |
+| Commit | `47e332c1829de641649fcd08ebbca9d1690913e7` (the source apktool project's only commit) |
 | Commit subject | "Apktool-decoded project (rebuildable) — package renamed to apers.terminal.agent.ap, custom icons, billing/ads stripped" |
 | Working branch | `local/apk-build-fix` |
 | Project type | apktool-decoded APK (base of a Play split-APK set). **Not** a Gradle project. |

@@ -1,0 +1,47 @@
+package com.hermes.android.ui;
+
+import com.google.firebase.encoders.json.BuildConfig;
+import com.goterl.lazysodium.interfaces.Box;
+import kotlin.Metadata;
+import kotlin.enums.EnumEntries;
+import kotlin.enums.EnumEntriesKt;
+
+/* JADX WARN: Failed to restore enum class, 'enum' modifier and super class removed */
+/* JADX WARN: Unknown enum class pattern. Please report as an issue! */
+/* JADX INFO: compiled from: EdgeFeaturesSheet.kt */
+/* JADX INFO: loaded from: /data/user/0/com.hermesagent.android/files/home/extract/classes2.dex */
+@Metadata(d1 = {"\u0000\f\n\u0002\u0018\u0002\n\u0002\u0010\u0010\n\u0002\b\b\b\u0082\u0081\u0002\u0018\u00002\b\u0012\u0004\u0012\u00020\u00000\u0001B\t\b\u0002¢\u0006\u0004\b\u0002\u0010\u0003j\u0002\b\u0004j\u0002\b\u0005j\u0002\b\u0006j\u0002\b\u0007j\u0002\b\b¨\u0006\t"}, d2 = {"Lcom/hermes/android/ui/InstallState;", BuildConfig.FLAVOR, "<init>", "(Ljava/lang/String;I)V", "IDLE", "REVIEWING", "INSTALLING", "DONE", "FAILED", "app_release"}, k = 1, mv = {2, 0, 0}, xi = Box.SEALBYTES)
+final class InstallState {
+    private static final /* synthetic */ EnumEntries $ENTRIES;
+    private static final /* synthetic */ InstallState[] $VALUES;
+    public static final InstallState IDLE = new InstallState("IDLE", 0);
+    public static final InstallState REVIEWING = new InstallState("REVIEWING", 1);
+    public static final InstallState INSTALLING = new InstallState("INSTALLING", 2);
+    public static final InstallState DONE = new InstallState("DONE", 3);
+    public static final InstallState FAILED = new InstallState("FAILED", 4);
+
+    private static final /* synthetic */ InstallState[] $values() {
+        return new InstallState[]{IDLE, REVIEWING, INSTALLING, DONE, FAILED};
+    }
+
+    public static EnumEntries<InstallState> getEntries() {
+        return $ENTRIES;
+    }
+
+    static {
+        InstallState[] installStateArr$values = $values();
+        $VALUES = installStateArr$values;
+        $ENTRIES = EnumEntriesKt.enumEntries(installStateArr$values);
+    }
+
+    private InstallState(String str, int i) {
+    }
+
+    public static InstallState valueOf(String str) {
+        return (InstallState) Enum.valueOf(InstallState.class, str);
+    }
+
+    public static InstallState[] values() {
+        return (InstallState[]) $VALUES.clone();
+    }
+}
