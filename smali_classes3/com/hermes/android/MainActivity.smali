@@ -247,6 +247,58 @@
     .line 150
     invoke-super {p0, p1}, Landroidx/appcompat/app/AppCompatActivity;->onCreate(Landroid/os/Bundle;)V
 
+    # ── All-files-access (MANAGE_EXTERNAL_STORAGE) request (added for standalone build) ──
+    # On Android 11+ (R/API 30), if we don't already hold "All files access", open the
+    # system settings screen so the user can grant it. Wrapped so it can never crash startup.
+    sget v1, Landroid/os/Build$VERSION;->SDK_INT:I
+
+    const/16 v3, 0x1e
+
+    if-lt v1, v3, :apers_mes_done
+
+    invoke-static {}, Landroid/os/Environment;->isExternalStorageManager()Z
+
+    move-result v1
+
+    if-nez v1, :apers_mes_done
+
+    :try_start_apers_mes
+    new-instance v1, Landroid/content/Intent;
+
+    const-string v3, "android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION"
+
+    invoke-direct {v1, v3}, Landroid/content/Intent;-><init>(Ljava/lang/String;)V
+
+    invoke-virtual {p0}, Lcom/hermes/android/MainActivity;->getPackageName()Ljava/lang/String;
+
+    move-result-object v3
+
+    const-string v4, "package"
+
+    const/4 v5, 0x0
+
+    invoke-static {v4, v3, v5}, Landroid/net/Uri;->fromParts(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;
+
+    move-result-object v3
+
+    invoke-virtual {v1, v3}, Landroid/content/Intent;->setData(Landroid/net/Uri;)Landroid/content/Intent;
+
+    invoke-virtual {p0, v1}, Lcom/hermes/android/MainActivity;->startActivity(Landroid/content/Intent;)V
+    :try_end_apers_mes
+    .catch Ljava/lang/Exception; {:try_start_apers_mes .. :try_end_apers_mes} :catch_apers_mes
+
+    goto :apers_mes_done
+
+    :catch_apers_mes
+    move-exception v1
+
+    const-string v3, "All-files-access settings screen unavailable"
+
+    invoke-static {v0, v3}, Landroid/util/Log;->w(Ljava/lang/String;Ljava/lang/String;)I
+
+    :apers_mes_done
+    # ── end All-files-access request ──
+
     .line 153
     sget p1, Landroid/os/Build$VERSION;->SDK_INT:I
 
