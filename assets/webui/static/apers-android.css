@@ -535,9 +535,13 @@ body.apers-android-host,
 @media (max-width: 640px) {
   .apers-android-host .sidebar {
     bottom: 0;
-    box-shadow: 14px 0 38px rgba(36, 32, 25, .16);
+    box-shadow: none;
     max-width: 330px;
     width: min(88vw, 330px);
+  }
+
+  .apers-android-host .sidebar.mobile-open {
+    box-shadow: 14px 0 38px rgba(36, 32, 25, .16);
   }
 
   .apers-android-host .mobile-overlay.visible {
