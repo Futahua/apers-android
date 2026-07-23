@@ -6,16 +6,23 @@
   var THREAD_PREFIX = 'apers-computer-thread-v1:';
   var PENDING_KEY = 'apers-computer-pending-v1';
   var BINDINGS_KEY = 'apers-computer-bindings-v1';
+  var DESKTOP_CATALOG_KEY = 'apers-desktop-catalog-v1';
+  var PHONE_ORDER_KEY = 'apers-phone-session-order-v1';
+  var PROJECT_ORDER_KEY = 'apers-phone-project-order-v1';
   var RESULT_PREFIX = '__APERS_CHAT_RESULT_V1__:';
   var PROGRESS_PREFIX = '__APERS_PROGRESS_V1__\n';
   var CONTROL_LIST_ID = '__desktop_sessions__';
   var CONTROL_BIND_ID = '__desktop_bind__';
   var CONTROL_NEW_ID = '__desktop_new__';
   var CONTROL_PORT_ID = '__desktop_port__';
+  var CONTROL_RENAME_ID = '__desktop_rename__';
+  var CONTROL_ARCHIVE_ID = '__desktop_archive__';
   var CONTROL_LIST_PROMPT = '__APERS_LIST_DESKTOP_SESSIONS_V1__';
   var CONTROL_BIND_PROMPT = '__APERS_BIND_DESKTOP_SESSION_V1__';
   var CONTROL_NEW_PROMPT = '__APERS_NEW_DESKTOP_SESSION_V1__';
   var CONTROL_PORT_PROMPT = '__APERS_PORT_PHONE_SESSION_V1__';
+  var CONTROL_RENAME_PROMPT = '__APERS_RENAME_DESKTOP_SESSION_V1__';
+  var CONTROL_ARCHIVE_PROMPT = '__APERS_ARCHIVE_DESKTOP_SESSION_V1__';
   var linked = false;
   var online = false;
   var connectionChecked = false;
@@ -26,7 +33,14 @@
   var routes = readJson(ROUTES_KEY, {});
   var dispatching = {};
   var controlRequests = {};
-  var desktopSessions = [];
+  var cachedDesktopSessions = readJson(DESKTOP_CATALOG_KEY, []);
+  var desktopSessions = Array.isArray(cachedDesktopSessions)
+    ? cachedDesktopSessions : [];
+  var sidebarMode = 'phone';
+  var sidebarState = '';
+  var sidebarStateIsError = false;
+  var nativeSessionRenderer = null;
+  var suppressSessionClickUntil = 0;
   var pickerOpen = false;
   var pickerHistory = false;
 
@@ -406,10 +420,7 @@
     if (typeof switchPanel === 'function') {
       switchPanel('chat', { fromRailClick: true });
     }
-    if (typeof closeMobileSidebar === 'function') {
-      closeMobileSidebar();
-    }
-    openDesktopSessions();
+    setSidebarMode('desktop');
   }
 
   async function ensurePhoneSession() {
@@ -418,6 +429,643 @@
       if (typeof renderSessionList === 'function') await renderSessionList();
     }
     return activeSessionId();
+  }
+
+  function sidebarList() {
+    return document.getElementById('sessionList');
+  }
+
+  function setSidebarHeading(value) {
+    var heading = document.querySelector('#panelChat > .panel-head > span');
+    if (heading) heading.textContent = value;
+  }
+
+  function reflectSidebarMode() {
+    setSidebarHeading(sidebarMode === 'desktop' ? 'Desktop' : 'Chat');
+    document.querySelectorAll('[data-apers-destination="desktop"]').forEach(function (element) {
+      element.classList.toggle('is-sidebar-active', sidebarMode === 'desktop');
+    });
+  }
+
+  function setSidebarMode(mode) {
+    sidebarMode = mode === 'desktop' ? 'desktop' : 'phone';
+    sidebarState = '';
+    sidebarStateIsError = false;
+    reflectSidebarMode();
+    var newButton = document.getElementById('btnNewChat');
+    if (newButton) {
+      newButton.setAttribute(
+        'aria-label',
+        sidebarMode === 'desktop' ? 'New Desktop session' : 'New conversation');
+      newButton.setAttribute(
+        'data-tooltip',
+        sidebarMode === 'desktop' ? 'New Desktop session' : 'New conversation');
+    }
+    renderUnifiedSidebar();
+    if (sidebarMode === 'desktop') {
+      requestDesktopSessions(activeSessionId() || '__desktop_sidebar__');
+    }
+  }
+
+  function installUnifiedSidebar() {
+    if (nativeSessionRenderer || typeof window.renderSessionListFromCache !== 'function') return;
+    if (typeof window._requestedSessionSidebarSource === 'function') {
+      window._requestedSessionSidebarSource = function () { return 'all'; };
+    }
+    try { _activeProject = null; } catch (_) {}
+    nativeSessionRenderer = window.renderSessionListFromCache;
+    window.renderSessionListFromCache = function () {
+      if (document.documentElement.classList.contains('apers-android-host')) {
+        renderUnifiedSidebar();
+        return;
+      }
+      return nativeSessionRenderer.apply(this, arguments);
+    };
+
+    document.querySelectorAll('[data-panel="chat"]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        if (sidebarMode !== 'phone') setSidebarMode('phone');
+      }, true);
+    });
+
+    var newButton = document.getElementById('btnNewChat');
+    if (newButton) {
+      newButton.addEventListener('click', function (event) {
+        if (sidebarMode !== 'desktop') return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        startNewDesktopSession();
+      }, true);
+    }
+
+    var search = document.getElementById('sessionSearch');
+    if (search) {
+      search.addEventListener('input', function () {
+        renderUnifiedSidebar();
+      });
+    }
+  }
+
+  function phoneSessionRows() {
+    var active = activeSessionId();
+    var rows = Array.isArray(_allSessions) ? _allSessions.slice() : [];
+    if (typeof _sessionRowsWithActiveEphemeralSession === 'function') {
+      rows = _sessionRowsWithActiveEphemeralSession(rows);
+    }
+    rows = rows.filter(function (session) {
+      if (!session || !session.session_id || session.archived ||
+          session.default_hidden || isDesktopConversation(session.session_id)) return false;
+      if (typeof _sidebarRowHasVisibleMessages === 'function' &&
+          !_sidebarRowHasVisibleMessages(session, active)) return false;
+      return true;
+    });
+    if (typeof _renderSidebarRowsFromRawSessions === 'function') {
+      try {
+        rows = _renderSidebarRowsFromRawSessions(rows, rows);
+      } catch (_) {
+        // A future upstream lineage change should not make the Android list vanish.
+      }
+    }
+    var seen = {};
+    return rows.filter(function (session) {
+      if (!session || seen[session.session_id]) return false;
+      seen[session.session_id] = true;
+      return true;
+    });
+  }
+
+  function phoneOrder() {
+    var value = readJson(PHONE_ORDER_KEY, []);
+    return Array.isArray(value) ? value : [];
+  }
+
+  function orderedPhoneRows(rows) {
+    var order = phoneOrder();
+    var positions = {};
+    order.forEach(function (id, index) { positions[id] = index; });
+    return rows.slice().sort(function (a, b) {
+      var ai = Object.prototype.hasOwnProperty.call(positions, a.session_id)
+        ? positions[a.session_id] : Number.MAX_SAFE_INTEGER;
+      var bi = Object.prototype.hasOwnProperty.call(positions, b.session_id)
+        ? positions[b.session_id] : Number.MAX_SAFE_INTEGER;
+      if (ai !== bi) return ai - bi;
+      var at = typeof _sessionTimestampMs === 'function'
+        ? _sessionTimestampMs(a) : Number(a.updated_at || a.started_at || 0) * 1000;
+      var bt = typeof _sessionTimestampMs === 'function'
+        ? _sessionTimestampMs(b) : Number(b.updated_at || b.started_at || 0) * 1000;
+      return bt - at;
+    });
+  }
+
+  function sessionTitle(session) {
+    var value = typeof _sessionDisplayTitle === 'function'
+      ? _sessionDisplayTitle(session)
+      : (session.title || session.display_title || '');
+    value = String(value || '').trim();
+    return value && value.indexOf('[SYSTEM:') !== 0 ? value : 'Untitled';
+  }
+
+  function appendSessionRow(body, session) {
+    var row = document.createElement('div');
+    row.className = 'session-item apers-unified-session';
+    row.dataset.sid = session.session_id;
+    row.dataset.projectId = session.project_id || '';
+    if (session.session_id === activeSessionId()) row.classList.add('active');
+
+    var text = document.createElement('div');
+    text.className = 'session-text';
+    var titleRow = document.createElement('div');
+    titleRow.className = 'session-title-row';
+    var title = document.createElement('span');
+    title.className = 'session-title';
+    title.textContent = sessionTitle(session);
+    var age = document.createElement('span');
+    age.className = 'session-time';
+    var stamp = typeof _sessionTimestampMs === 'function'
+      ? _sessionTimestampMs(session) : Number(session.started_at || 0) * 1000;
+    age.textContent = typeof _formatRelativeSessionTime === 'function'
+      ? _formatRelativeSessionTime(stamp) : formatSessionAge(stamp / 1000);
+    titleRow.appendChild(title);
+    titleRow.appendChild(age);
+    text.appendChild(titleRow);
+    row.appendChild(text);
+    attachPhoneSessionGesture(row, session);
+    body.appendChild(row);
+  }
+
+  function renderPhoneSidebar(list) {
+    var query = String(
+      document.getElementById('sessionSearch') &&
+      document.getElementById('sessionSearch').value || '').trim().toLowerCase();
+    var rows = orderedPhoneRows(phoneSessionRows()).filter(function (session) {
+      if (!query) return true;
+      return (sessionTitle(session) + ' ' + String(
+        session.preview || session.last_message_preview || '')).toLowerCase()
+        .indexOf(query) >= 0;
+    });
+    var groups = [];
+    var projectIds = {};
+    (Array.isArray(_allProjects) ? _allProjects : []).forEach(function (project) {
+      if (!project || !project.project_id || projectIds[project.project_id]) return;
+      projectIds[project.project_id] = true;
+      groups.push({ id: project.project_id, name: project.name || 'Project', project: project, rows: [] });
+    });
+    var projectOrder = readJson(PROJECT_ORDER_KEY, []);
+    if (Array.isArray(projectOrder)) {
+      groups.sort(function (a, b) {
+        var ai = projectOrder.indexOf(a.id);
+        var bi = projectOrder.indexOf(b.id);
+        if (ai < 0) ai = Number.MAX_SAFE_INTEGER;
+        if (bi < 0) bi = Number.MAX_SAFE_INTEGER;
+        return ai - bi;
+      });
+    }
+    var unassigned = { id: '', name: 'Unassigned', project: null, rows: [] };
+    rows.forEach(function (session) {
+      var group = groups.find(function (item) {
+        return item.id === String(session.project_id || '');
+      });
+      (group || unassigned).rows.push(session);
+    });
+    groups.push(unassigned);
+    groups.forEach(function (group) {
+      if (query && !group.rows.length) return;
+      var wrapper = document.createElement('section');
+      wrapper.className = 'apers-project-group';
+      wrapper.dataset.projectId = group.id;
+      var header = document.createElement('div');
+      header.className = 'apers-project-heading';
+      if (group.project && group.project.color) {
+        var dot = document.createElement('span');
+        dot.className = 'apers-project-dot';
+        dot.style.background = group.project.color;
+        header.appendChild(dot);
+      }
+      var label = document.createElement('span');
+      label.textContent = group.name;
+      header.appendChild(label);
+      var body = document.createElement('div');
+      body.className = 'apers-project-body';
+      body.dataset.projectId = group.id;
+      group.rows.forEach(function (session) { appendSessionRow(body, session); });
+      wrapper.appendChild(header);
+      wrapper.appendChild(body);
+      if (group.id) attachProjectGesture(header, wrapper);
+      list.appendChild(wrapper);
+    });
+    if (!rows.length && query) {
+      appendSidebarState(list, 'No matching conversations.', false);
+    }
+  }
+
+  function localShellForDesktop(desktopSessionId) {
+    return Object.keys(bindings).find(function (localId) {
+      return bindings[localId] &&
+        String(bindings[localId].id) === String(desktopSessionId) &&
+        isDesktopConversation(localId);
+    }) || '';
+  }
+
+  function appendDesktopRow(list, session) {
+    var row = document.createElement('div');
+    row.className = 'session-item apers-unified-session apers-desktop-sidebar-session';
+    row.dataset.desktopSessionId = session.id;
+    var localId = localShellForDesktop(session.id);
+    if (localId && localId === activeSessionId()) row.classList.add('active');
+    var text = document.createElement('div');
+    text.className = 'session-text';
+    var titleRow = document.createElement('div');
+    titleRow.className = 'session-title-row';
+    var title = document.createElement('span');
+    title.className = 'session-title';
+    title.textContent = session.title || 'Untitled session';
+    var age = document.createElement('span');
+    age.className = 'session-time';
+    age.textContent = formatSessionAge(session.last_active);
+    titleRow.appendChild(title);
+    titleRow.appendChild(age);
+    text.appendChild(titleRow);
+    row.appendChild(text);
+    attachDesktopSessionGesture(row, session);
+    list.appendChild(row);
+  }
+
+  function renderDesktopSidebar(list) {
+    var query = String(
+      document.getElementById('sessionSearch') &&
+      document.getElementById('sessionSearch').value || '').trim().toLowerCase();
+    var rows = desktopSessions.filter(function (session) {
+      if (!query) return true;
+      return (String(session.title || '') + ' ' + String(session.preview || ''))
+        .toLowerCase().indexOf(query) >= 0;
+    });
+    var heading = document.createElement('div');
+    heading.className = 'apers-project-heading apers-desktop-heading';
+    heading.textContent = 'Hermes PC';
+    list.appendChild(heading);
+    if (sidebarState) {
+      appendSidebarState(list, sidebarState, sidebarStateIsError);
+    } else if (!rows.length) {
+      appendSidebarState(
+        list,
+        query ? 'No matching Desktop sessions.' :
+          (connectionChecked && !online
+            ? 'Hermes PC is offline. Cached sessions remain available to read.'
+            : 'No Desktop sessions yet.'),
+        false);
+    }
+    rows.forEach(function (session) { appendDesktopRow(list, session); });
+  }
+
+  function appendSidebarState(list, message, isError) {
+    var state = document.createElement('div');
+    state.className = 'apers-sidebar-state' + (isError ? ' is-error' : '');
+    state.textContent = message;
+    list.appendChild(state);
+  }
+
+  function renderUnifiedSidebar() {
+    if (!document.documentElement.classList.contains('apers-android-host')) return;
+    var list = sidebarList();
+    if (!list) return;
+    var scroll = list.scrollTop || 0;
+    list.innerHTML = '';
+    if (sidebarMode === 'desktop') renderDesktopSidebar(list);
+    else renderPhoneSidebar(list);
+    list.scrollTop = scroll;
+  }
+
+  function persistPhoneDomOrder() {
+    var ids = Array.prototype.map.call(
+      document.querySelectorAll('#sessionList .apers-unified-session[data-sid]'),
+      function (row) { return row.dataset.sid; });
+    writeJson(PHONE_ORDER_KEY, ids);
+  }
+
+  function persistProjectDomOrder() {
+    var ids = Array.prototype.map.call(
+      document.querySelectorAll('#sessionList .apers-project-group[data-project-id]:not([data-project-id=""])'),
+      function (group) { return group.dataset.projectId; });
+    writeJson(PROJECT_ORDER_KEY, ids);
+  }
+
+  function attachProjectGesture(header, wrapper) {
+    var timer = null;
+    var dragging = false;
+    var held = false;
+    var startY = 0;
+    header.addEventListener('pointerdown', function (event) {
+      startY = event.clientY;
+      timer = setTimeout(function () {
+        held = true;
+        header.classList.add('long-pressing');
+      }, 360);
+    });
+    header.addEventListener('pointermove', function (event) {
+      var distance = Math.abs(event.clientY - startY);
+      if (!held) {
+        if (distance > 9 && timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        return;
+      }
+      if (distance <= 7 && !dragging) return;
+      dragging = true;
+      event.preventDefault();
+      wrapper.classList.add('is-dragging');
+      var target = document.elementFromPoint(event.clientX, event.clientY);
+      var targetGroup = target && target.closest('.apers-project-group[data-project-id]:not([data-project-id=""])');
+      if (!targetGroup || targetGroup === wrapper) return;
+      var rect = targetGroup.getBoundingClientRect();
+      targetGroup.parentNode.insertBefore(
+        wrapper,
+        event.clientY < rect.top + rect.height / 2 ? targetGroup : targetGroup.nextSibling);
+    }, { passive: false });
+    var finish = function () {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      header.classList.remove('long-pressing');
+      wrapper.classList.remove('is-dragging');
+      if (dragging) persistProjectDomOrder();
+      dragging = false;
+      held = false;
+    };
+    header.addEventListener('pointerup', finish);
+    header.addEventListener('pointercancel', finish);
+  }
+
+  function attachPhoneSessionGesture(row, session) {
+    attachManagedGesture(row, {
+      click: function () {
+        if (Date.now() < suppressSessionClickUntil) return;
+        if (typeof loadSession === 'function') {
+          Promise.resolve(loadSession(session.session_id)).then(closeSidebarIfOpen);
+        }
+      },
+      menu: function () { openPhoneSessionActions(session); },
+      dropped: async function () {
+        persistPhoneDomOrder();
+        var body = row.closest('.apers-project-body');
+        var nextProject = body ? String(body.dataset.projectId || '') : '';
+        var previousProject = String(session.project_id || '');
+        if (nextProject !== previousProject && typeof api === 'function') {
+          try {
+            await api('/api/session/move', {
+              method: 'POST',
+              body: JSON.stringify({
+                session_id: session.session_id,
+                project_id: nextProject || null
+              })
+            });
+            session.project_id = nextProject || null;
+            var cached = _allSessions.find(function (item) {
+              return item && item.session_id === session.session_id;
+            });
+            if (cached) cached.project_id = session.project_id;
+          } catch (error) {
+            if (typeof showToast === 'function') {
+              showToast('Move failed: ' + String(error.message || error), 3000, 'error');
+            }
+          }
+        }
+        renderUnifiedSidebar();
+      }
+    });
+  }
+
+  function attachDesktopSessionGesture(row, session) {
+    attachManagedGesture(row, {
+      click: function () {
+        if (Date.now() < suppressSessionClickUntil) return;
+        openDesktopSession(session.id);
+      },
+      menu: function () { openDesktopSessionActions(session); }
+    });
+  }
+
+  function attachManagedGesture(row, handlers) {
+    var timer = null;
+    var held = false;
+    var dragging = false;
+    var startX = 0;
+    var startY = 0;
+    var pointerId = null;
+    row.addEventListener('click', function (event) {
+      if (Date.now() < suppressSessionClickUntil) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      handlers.click();
+    });
+    row.addEventListener('pointerdown', function (event) {
+      if (event.button !== undefined && event.button !== 0) return;
+      startX = event.clientX;
+      startY = event.clientY;
+      pointerId = event.pointerId;
+      held = false;
+      dragging = false;
+      timer = setTimeout(function () {
+        held = true;
+        row.classList.add('long-pressing');
+      }, 360);
+    });
+    row.addEventListener('pointermove', function (event) {
+      var dx = Math.abs(event.clientX - startX);
+      var dy = Math.abs(event.clientY - startY);
+      if (!held) {
+        if ((dx > 9 || dy > 9) && timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        return;
+      }
+      if (dx <= 7 && dy <= 7 && !dragging) return;
+      if (!row.dataset.sid) return;
+      dragging = true;
+      suppressSessionClickUntil = Date.now() + 700;
+      row.classList.remove('long-pressing');
+      row.classList.add('is-dragging');
+      event.preventDefault();
+      var target = document.elementFromPoint(event.clientX, event.clientY);
+      if (!target) return;
+      var targetRow = target.closest('.apers-unified-session[data-sid]');
+      var targetGroup = target.closest('.apers-project-group');
+      var targetBody = target.closest('.apers-project-body') ||
+        (targetGroup && targetGroup.querySelector('.apers-project-body'));
+      if (targetRow && targetRow !== row) {
+        var rect = targetRow.getBoundingClientRect();
+        targetRow.parentNode.insertBefore(
+          row, event.clientY < rect.top + rect.height / 2 ? targetRow : targetRow.nextSibling);
+      } else if (targetBody && targetBody !== row.parentNode) {
+        targetBody.appendChild(row);
+      }
+    }, { passive: false });
+    var finish = function () {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      row.classList.remove('long-pressing', 'is-dragging');
+      if (dragging) {
+        suppressSessionClickUntil = Date.now() + 700;
+        if (handlers.dropped) handlers.dropped();
+      } else if (held) {
+        suppressSessionClickUntil = Date.now() + 700;
+        handlers.menu();
+      }
+      held = false;
+      dragging = false;
+      pointerId = null;
+    };
+    row.addEventListener('pointerup', finish);
+    row.addEventListener('pointercancel', finish);
+    row.addEventListener('contextmenu', function (event) {
+      event.preventDefault();
+      handlers.menu();
+    });
+  }
+
+  function closeActionSheet() {
+    var sheet = document.getElementById('apersSessionActions');
+    if (sheet) sheet.remove();
+  }
+
+  function openActionSheet(title, actions) {
+    closeActionSheet();
+    var backdrop = document.createElement('div');
+    backdrop.id = 'apersSessionActions';
+    backdrop.className = 'apers-session-actions';
+    var panel = document.createElement('section');
+    panel.className = 'apers-session-actions-panel';
+    var heading = document.createElement('strong');
+    heading.textContent = title;
+    panel.appendChild(heading);
+    actions.forEach(function (action) {
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = action.label;
+      if (action.danger) button.classList.add('is-danger');
+      button.onclick = function () {
+        closeActionSheet();
+        action.run();
+      };
+      panel.appendChild(button);
+    });
+    var cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'apers-actions-cancel';
+    cancel.textContent = 'Cancel';
+    cancel.onclick = closeActionSheet;
+    panel.appendChild(cancel);
+    backdrop.appendChild(panel);
+    backdrop.onclick = function (event) {
+      if (event.target === backdrop) closeActionSheet();
+    };
+    document.body.appendChild(backdrop);
+  }
+
+  function openPhoneSessionActions(session) {
+    openActionSheet(sessionTitle(session), [
+      {
+        label: 'Rename',
+        run: async function () {
+          var title = await showPromptDialog({
+            message: 'Rename conversation',
+            confirmLabel: 'Rename',
+            value: sessionTitle(session),
+            placeholder: 'Conversation name'
+          });
+          title = String(title || '').trim();
+          if (!title) return;
+          try {
+            await api('/api/session/rename', {
+              method: 'POST',
+              body: JSON.stringify({ session_id: session.session_id, title: title })
+            });
+            session.title = title;
+            session.display_title = title;
+            renderUnifiedSidebar();
+          } catch (error) {
+            showToast('Rename failed: ' + String(error.message || error), 3000, 'error');
+          }
+        }
+      },
+      {
+        label: 'Move to project',
+        run: function () {
+          if (typeof _showProjectPicker === 'function') {
+            _showProjectPicker(session, document.querySelector(
+              '.apers-unified-session[data-sid="' + session.session_id + '"]') ||
+              document.getElementById('sessionList'));
+          }
+        }
+      },
+      {
+        label: 'Continue on Desktop',
+        run: async function () {
+          if (typeof loadSession === 'function') await loadSession(session.session_id);
+          portPhoneSession();
+        }
+      },
+      {
+        label: 'Archive',
+        danger: true,
+        run: function () {
+          if (typeof _archiveSession === 'function') _archiveSession(session, true);
+        }
+      }
+    ]);
+  }
+
+  function openDesktopSessionActions(session) {
+    openActionSheet(session.title || 'Untitled session', [
+      {
+        label: 'Rename',
+        run: async function () {
+          var title = await showPromptDialog({
+            message: 'Rename Desktop session',
+            confirmLabel: 'Rename',
+            value: session.title || '',
+            placeholder: 'Session name'
+          });
+          title = String(title || '').trim();
+          if (title) renameDesktopSession(session.id, title);
+        }
+      },
+      {
+        label: 'Archive',
+        danger: true,
+        run: async function () {
+          var confirmed = await showConfirmDialog({
+            message: 'Archive “' + (session.title || 'this Desktop session') + '”?',
+            confirmLabel: 'Archive',
+            danger: true
+          });
+          if (confirmed) archiveDesktopSession(session.id);
+        }
+      }
+    ]);
+  }
+
+  async function openDesktopSession(desktopSessionId) {
+    var localId = localShellForDesktop(desktopSessionId);
+    if (localId) {
+      if (typeof loadSession === 'function') await loadSession(localId);
+      renderThread(localId);
+      closeSidebarIfOpen();
+      if (online) bindDesktopSession(desktopSessionId, true, localId);
+      return;
+    }
+    bindDesktopSession(desktopSessionId, false);
+  }
+
+  function installHermesEmptyState() {
+    var empty = document.getElementById('emptyState');
+    if (!empty) return;
+    empty.innerHTML =
+      '<div class="apers-empty-wordmark">HERMES AGENT</div>' +
+      '<p class="apers-empty-subtitle">Search the repo, edit files, run tests, open PRs. ' +
+      'Tell me the goal and I’ll handle the mechanical parts.</p>';
   }
 
   function createDesktopPicker() {
@@ -475,6 +1123,16 @@
   }
 
   function showPickerState(message, isError) {
+    if (sidebarMode === 'desktop') {
+      sidebarState = String(message || '');
+      sidebarStateIsError = !!isError;
+      renderUnifiedSidebar();
+      return;
+    }
+    if (typeof showToast === 'function') {
+      showToast(String(message || ''), 3000, isError ? 'error' : undefined);
+      return;
+    }
     var picker = createDesktopPicker();
     var list = picker.querySelector('[data-apers-desktop-list]');
     list.innerHTML = '';
@@ -485,6 +1143,13 @@
   }
 
   function renderDesktopSessionList() {
+    writeJson(DESKTOP_CATALOG_KEY, desktopSessions);
+    sidebarState = '';
+    sidebarStateIsError = false;
+    if (sidebarMode === 'desktop') {
+      renderUnifiedSidebar();
+      return;
+    }
     var picker = createDesktopPicker();
     var list = picker.querySelector('[data-apers-desktop-list]');
     var search = picker.querySelector('[data-apers-desktop-search]');
@@ -539,23 +1204,7 @@
   }
 
   async function openDesktopSessions() {
-    var picker = createDesktopPicker();
-    picker.hidden = false;
-    picker.classList.add('is-open');
-    pickerOpen = true;
-    if (!pickerHistory) {
-      history.pushState({ apersDesktopPicker: true }, '');
-      pickerHistory = true;
-    }
-    showPickerState('Loading sessions…', false);
-    var sessionId = await ensurePhoneSession();
-    if (!sessionId) {
-      showPickerState('Could not create a local conversation.', true);
-      return;
-    }
-    var port = picker.querySelector('[data-apers-desktop-port]');
-    if (port) port.hidden = isDesktopConversation(sessionId);
-    requestDesktopSessions(sessionId);
+    setSidebarMode('desktop');
   }
 
   function closeDesktopSessions(fromHistory) {
@@ -595,6 +1244,34 @@
         conversation_id: conversationId(sessionId)
       }),
       sessionId);
+  }
+
+  function renameDesktopSession(desktopSessionId, title) {
+    var owner = activeSessionId() || '__desktop_sidebar__';
+    dispatchControl(
+      CONTROL_RENAME_ID,
+      'rename',
+      CONTROL_RENAME_PROMPT + '\n' + JSON.stringify({
+        conversation_id: conversationId(owner),
+        session_id: desktopSessionId,
+        title: title
+      }),
+      owner,
+      { desktopSessionId: desktopSessionId });
+  }
+
+  function archiveDesktopSession(desktopSessionId) {
+    var owner = activeSessionId() || '__desktop_sidebar__';
+    dispatchControl(
+      CONTROL_ARCHIVE_ID,
+      'archive',
+      CONTROL_ARCHIVE_PROMPT + '\n' + JSON.stringify({
+        conversation_id: conversationId(owner),
+        session_id: desktopSessionId,
+        archived: true
+      }),
+      owner,
+      { desktopSessionId: desktopSessionId });
   }
 
   async function ensureDesktopShell() {
@@ -893,6 +1570,8 @@
 
   function applyDesktopHistory(owner, value) {
     var remoteSession = value.session || {};
+    sidebarMode = 'desktop';
+    reflectSidebarMode();
     bindings[owner.sessionId] = remoteSession;
     markDesktopConversation(owner.sessionId);
     writeJson(BINDINGS_KEY, bindings);
@@ -952,6 +1631,7 @@
     }
     if (owner.kind === 'list') {
       desktopSessions = Array.isArray(value.sessions) ? value.sessions : [];
+      writeJson(DESKTOP_CATALOG_KEY, desktopSessions);
       var selectedId = String(value.selected_session_id || '');
       var selected = desktopSessions.find(function (session) {
         return session.id === selectedId;
@@ -975,6 +1655,7 @@
       var remoteSession = applyDesktopHistory(owner, value);
       if (!owner.silent) {
         closeDesktopSessions();
+        closeSidebarIfOpen();
         if (typeof showToast === 'function') {
           showToast('Continuing “' + (remoteSession.title || 'Desktop session') + '”.', 2600);
         }
@@ -994,6 +1675,7 @@
       updateTargetUi();
       renderThread(owner.sessionId);
       closeDesktopSessions();
+      closeSidebarIfOpen();
       if (typeof showToast === 'function') {
         showToast('New Desktop session ready.', 2200);
       }
@@ -1007,6 +1689,36 @@
           '“' + (ported.title || 'Phone conversation') + '” is now available on Desktop.',
           3200);
       }
+      renderUnifiedSidebar();
+      return;
+    }
+    if (owner.kind === 'rename') {
+      var renamedId = String(value.session_id || owner.desktopSessionId || '');
+      var renamed = desktopSessions.find(function (session) {
+        return String(session.id) === renamedId;
+      });
+      if (renamed) renamed.title = String(value.title || renamed.title || '');
+      writeJson(DESKTOP_CATALOG_KEY, desktopSessions);
+      if (typeof showToast === 'function') showToast('Desktop session renamed.', 2200);
+      requestDesktopSessions(owner.sessionId || '__desktop_sidebar__');
+      renderUnifiedSidebar();
+      return;
+    }
+    if (owner.kind === 'archive') {
+      var archivedId = String(value.session_id || owner.desktopSessionId || '');
+      desktopSessions = desktopSessions.filter(function (session) {
+        return String(session.id) !== archivedId;
+      });
+      Object.keys(bindings).forEach(function (localId) {
+        if (bindings[localId] && String(bindings[localId].id) === archivedId) {
+          delete bindings[localId];
+        }
+      });
+      writeJson(BINDINGS_KEY, bindings);
+      writeJson(DESKTOP_CATALOG_KEY, desktopSessions);
+      if (typeof showToast === 'function') showToast('Desktop session archived.', 2200);
+      renderUnifiedSidebar();
+      requestDesktopSessions(owner.sessionId || '__desktop_sidebar__');
     }
   }
 
@@ -1021,12 +1733,14 @@
     online = false;
     connectionChecked = true;
     updateTargetUi();
+    if (sidebarMode === 'desktop') renderUnifiedSidebar();
   }
 
   function onPollStatus(event) {
     online = !!(event && event.ok);
     connectionChecked = true;
     updateTargetUi();
+    if (sidebarMode === 'desktop') renderUnifiedSidebar();
   }
 
   function pollComputer() {
@@ -1042,6 +1756,7 @@
     document.documentElement.classList.add('apers-android-host');
     if (document.body) document.body.classList.add('apers-android-host');
     document.querySelectorAll('[data-apers-android-only]').forEach(function (element) {
+      if (element.closest('.rail')) return;
       element.hidden = false;
       element.removeAttribute('aria-hidden');
     });
@@ -1079,11 +1794,13 @@
   function start() {
     localStorage.removeItem(LEGACY_TARGET_KEY);
     revealAndroidActions();
+    installUnifiedSidebar();
+    installHermesEmptyState();
     installDrawerBackdrop();
-    createDesktopPicker();
     window.addEventListener('popstate', function () {
       if (pickerOpen) closeDesktopSessions(true);
     });
+    setSidebarMode('phone');
     updateTargetUi();
     setInterval(function () {
       var current = activeSessionId();
