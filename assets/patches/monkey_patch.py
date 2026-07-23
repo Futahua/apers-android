@@ -49,6 +49,99 @@ else:
     tempfile.tempdir = _TERMUX_TMP
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 1b. Papers skin — install + activate on startup (idempotent).
+    #     Themes the Hermes CLI/TUI output to the Papers Dark palette and strips the
+    #     gold banner / ⚕ header / box rules, so terminal output blends with the
+    #     native chat UI. Fully wrapped so it can never break agent startup.
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    try:
+        _HERMES_HOME = os.environ.get("HERMES_HOME") or os.path.join(
+            os.path.expanduser("~"), ".hermes"
+        )
+        _skins_dir = os.path.join(_HERMES_HOME, "skins")
+        os.makedirs(_skins_dir, exist_ok=True)
+        _papers_skin = os.path.join(_skins_dir, "papers.yaml")
+        _PAPERS_YAML = (
+            "name: papers\n"
+            "description: Papers — quiet warm-dark, banner and box chrome removed\n"
+            "colors:\n"
+            "  background: \"#0a0a18\"\n"
+            "  banner_title: \"#f3f0e8\"\n"
+            "  banner_text: \"#f3f0e8\"\n"
+            "  ui_text: \"#f3f0e8\"\n"
+            "  banner_dim: \"#8a86a0\"\n"
+            "  banner_accent: \"#cf806d\"\n"
+            "  ui_accent: \"#cf806d\"\n"
+            "  banner_border: \"#0a0a18\"\n"
+            "  ui_border: \"#1a1a30\"\n"
+            "  input_rule: \"#0a0a18\"\n"
+            "  response_border: \"#0a0a18\"\n"
+            "  ui_ok: \"#4e705a\"\n"
+            "  ui_warn: \"#9d7134\"\n"
+            "  ui_error: \"#9a4c42\"\n"
+            "  prompt: \"#f3f0e8\"\n"
+            "  status_bar_bg: \"#111124\"\n"
+            "  status_bar_text: \"#c9c5d8\"\n"
+            "  ui_thinking: \"#8a86a0\"\n"
+            "  syntax_comment: \"#8a86a0\"\n"
+            "light_colors:\n"
+            "  background: \"#f4f2ec\"\n"
+            "  banner_title: \"#20201e\"\n"
+            "  banner_text: \"#20201e\"\n"
+            "  ui_text: \"#20201e\"\n"
+            "  banner_dim: \"#747169\"\n"
+            "  banner_accent: \"#9a4c42\"\n"
+            "  ui_accent: \"#9a4c42\"\n"
+            "  banner_border: \"#f4f2ec\"\n"
+            "  input_rule: \"#f4f2ec\"\n"
+            "  response_border: \"#f4f2ec\"\n"
+            "  prompt: \"#20201e\"\n"
+            "branding:\n"
+            "  agent_name: \"Hermes\"\n"
+            "  response_label: \" Hermes \"\n"
+            "  prompt_symbol: \"❯\"\n"
+            "  help_header: \"Commands\"\n"
+            "tool_prefix: \"·\"\n"
+        )
+        # Write skin once (don't clobber a hand-edited one on every boot).
+        if not os.path.exists(_papers_skin):
+            with open(_papers_skin, "w", encoding="utf-8") as _f:
+                _f.write(_PAPERS_YAML)
+        # Ensure config.yaml selects it: set display.skin: papers if not already set.
+        _cfg = os.path.join(_HERMES_HOME, "config.yaml")
+        _needs_skin = True
+        _cfg_text = ""
+        if os.path.exists(_cfg):
+            with open(_cfg, "r", encoding="utf-8") as _f:
+                _cfg_text = _f.read()
+            for _line in _cfg_text.splitlines():
+                if _line.strip().startswith("skin:") and "papers" in _line:
+                    _needs_skin = False
+                    break
+        if _needs_skin:
+            # Minimal, YAML-safe injection under a display: block.
+            if "display:" in _cfg_text:
+                _new = []
+                _done = False
+                for _line in _cfg_text.splitlines():
+                    _new.append(_line)
+                    if not _done and _line.rstrip() == "display:":
+                        _new.append("  skin: papers")
+                        _done = True
+                if not _done:
+                    _new.append("display:")
+                    _new.append("  skin: papers")
+                _cfg_text = "\n".join(_new) + "\n"
+            else:
+                if _cfg_text and not _cfg_text.endswith("\n"):
+                    _cfg_text += "\n"
+                _cfg_text += "display:\n  skin: papers\n"
+            with open(_cfg, "w", encoding="utf-8") as _f:
+                _f.write(_cfg_text)
+    except Exception as _skin_exc:  # never break startup over theming
+        _logger.warning("Papers skin setup skipped: %s", _skin_exc)
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     # 2. 修復 Shell 路徑
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     _TERMUX_SH = os.path.join(_PREFIX, "bin", "sh")
