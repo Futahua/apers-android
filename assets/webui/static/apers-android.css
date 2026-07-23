@@ -224,6 +224,14 @@ body.apers-android-host,
   white-space: nowrap;
 }
 
+.apers-project-heading.has-project-color .apers-project-label {
+  color: color-mix(in srgb, var(--apers-project-color) 58%, var(--text));
+}
+
+.apers-desktop-project-named .apers-project-label {
+  color: #586b87;
+}
+
 .apers-project-add {
   align-items: center;
   background: transparent;
@@ -270,6 +278,10 @@ body.apers-android-host,
 
 .apers-project-body {
   min-height: 24px;
+}
+
+.apers-project-body .apers-unified-session {
+  margin-left: 12px;
 }
 
 .apers-unified-session {

@@ -662,6 +662,8 @@
       var header = document.createElement('div');
       header.className = 'apers-project-heading apers-project-heading-manageable';
       if (group.project && group.project.color) {
+        header.classList.add('has-project-color');
+        header.style.setProperty('--apers-project-color', group.project.color);
         var dot = document.createElement('span');
         dot.className = 'apers-project-dot';
         dot.style.background = group.project.color;
@@ -780,6 +782,7 @@
       wrapper.dataset.desktopProjectOrderId = projectOrderId(group.id);
       var header = document.createElement('div');
       header.className = 'apers-project-heading apers-project-heading-manageable';
+      if (group.id) header.classList.add('apers-desktop-project-named');
       var label = document.createElement('span');
       label.className = 'apers-project-label';
       label.textContent = group.name;
