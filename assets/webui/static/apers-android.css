@@ -64,7 +64,8 @@ body.apers-android-host,
 .apers-android-host .session-item.active,
 .apers-android-host .nav-tab.active,
 .apers-android-host .rail-btn.active,
-.apers-android-host [data-apers-destination="desktop"].is-active {
+.apers-android-host [data-apers-destination="desktop"].is-active,
+.apers-android-host [data-apers-destination="desktop"].is-sidebar-active {
   background: rgba(35, 33, 29, .08);
   color: var(--text);
 }
@@ -130,6 +131,178 @@ body.apers-android-host,
 .apers-sidebar-destination small {
   color: var(--muted);
   font-size: 10px;
+}
+
+.apers-android-host .session-list {
+  overscroll-behavior: contain;
+}
+
+.apers-project-group {
+  margin: 0 0 8px;
+}
+
+.apers-project-heading {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 10px;
+  font-weight: 650;
+  gap: 6px;
+  letter-spacing: .09em;
+  min-height: 28px;
+  padding: 5px 11px 3px;
+  text-transform: uppercase;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.apers-project-heading.long-pressing {
+  color: var(--text);
+}
+
+.apers-project-group.is-dragging {
+  background: rgba(255, 255, 255, .46);
+  border-radius: 8px;
+  box-shadow: 0 7px 18px rgba(30, 27, 22, .1);
+  opacity: .94;
+  position: relative;
+  z-index: 7;
+}
+
+.apers-project-dot {
+  border-radius: 50%;
+  height: 6px;
+  width: 6px;
+}
+
+.apers-project-body {
+  min-height: 24px;
+}
+
+.apers-unified-session {
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.apers-unified-session.long-pressing {
+  background: var(--hover-bg);
+  transform: scale(.985);
+}
+
+.apers-unified-session.is-dragging {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  box-shadow: 0 8px 22px rgba(30, 27, 22, .14);
+  opacity: .92;
+  position: relative;
+  z-index: 8;
+}
+
+.apers-desktop-heading {
+  padding-top: 8px;
+}
+
+.apers-sidebar-state {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 18px 12px;
+  text-align: center;
+}
+
+.apers-sidebar-state.is-error {
+  color: var(--accent-text);
+}
+
+.apers-session-actions {
+  align-items: flex-end;
+  background: rgba(30, 28, 24, .18);
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  left: 0;
+  padding: 12px;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 10040;
+}
+
+.apers-session-actions-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  box-shadow: 0 16px 46px rgba(28, 25, 20, .18);
+  display: flex;
+  flex-direction: column;
+  max-width: 430px;
+  overflow: hidden;
+  padding: 8px;
+  width: 100%;
+}
+
+.apers-session-actions-panel > strong {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  overflow: hidden;
+  padding: 8px 10px 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apers-session-actions-panel > button {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  min-height: 44px;
+  padding: 9px 11px;
+  text-align: left;
+}
+
+.apers-session-actions-panel > button:active {
+  background: var(--hover-bg);
+}
+
+.apers-session-actions-panel > button.is-danger {
+  color: var(--accent-text);
+}
+
+.apers-session-actions-panel > button.apers-actions-cancel {
+  border-top: 1px solid var(--border-subtle);
+  color: var(--muted);
+  margin-top: 5px;
+}
+
+.apers-android-host .empty-state {
+  background:
+    radial-gradient(ellipse at 50% 48%, rgba(116, 132, 158, .07), transparent 58%),
+    linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, .38), transparent 65%);
+  gap: 8px;
+  justify-content: center;
+  padding: 34px 24px 92px;
+}
+
+.apers-empty-wordmark {
+  color: #536b91;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(31px, 9vw, 48px);
+  font-weight: 700;
+  letter-spacing: -.055em;
+  line-height: .95;
+  text-align: center;
+}
+
+.apers-android-host .empty-state .apers-empty-subtitle {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 350px;
+  text-align: center;
 }
 
 .apers-desktop-picker {

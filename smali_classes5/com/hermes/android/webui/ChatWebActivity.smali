@@ -289,7 +289,7 @@
     .locals 1
 
     .line 54
-    const-string v0, "#0a0a18"
+    const-string v0, "#f8f7f3"
 
     invoke-static {v0}, Landroid/graphics/Color;->parseColor(Ljava/lang/String;)I
 
@@ -298,7 +298,7 @@
     sput v0, Lcom/hermes/android/webui/ChatWebActivity;->COLOR_CANVAS:I
 
     .line 55
-    const-string v0, "#f3f0e8"
+    const-string v0, "#292823"
 
     invoke-static {v0}, Landroid/graphics/Color;->parseColor(Ljava/lang/String;)I
 
@@ -307,7 +307,7 @@
     sput v0, Lcom/hermes/android/webui/ChatWebActivity;->COLOR_INK:I
 
     .line 56
-    const-string v0, "#8a86a0"
+    const-string v0, "#75716a"
 
     invoke-static {v0}, Landroid/graphics/Color;->parseColor(Ljava/lang/String;)I
 
@@ -325,7 +325,7 @@
     sput v0, Lcom/hermes/android/webui/ChatWebActivity;->COLOR_ACCENT:I
 
     .line 58
-    const-string v0, "#1a1a30"
+    const-string v0, "#ffffff"
 
     invoke-static {v0}, Landroid/graphics/Color;->parseColor(Ljava/lang/String;)I
 
@@ -1986,10 +1986,26 @@
 .end method
 
 .method protected onCreate(Landroid/os/Bundle;)V
-    .locals 1
+    .locals 2
 
     .line 76
     invoke-super {p0, p1}, Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V
+
+    invoke-virtual {p0}, Landroid/app/Activity;->getWindow()Landroid/view/Window;
+
+    move-result-object v0
+
+    sget v1, Lcom/hermes/android/webui/ChatWebActivity;->COLOR_CANVAS:I
+
+    invoke-virtual {v0, v1}, Landroid/view/Window;->setStatusBarColor(I)V
+
+    invoke-virtual {v0}, Landroid/view/Window;->getDecorView()Landroid/view/View;
+
+    move-result-object v0
+
+    const/16 v1, 0x2000
+
+    invoke-virtual {v0, v1}, Landroid/view/View;->setSystemUiVisibility(I)V
 
     .line 77
     invoke-direct {p0}, Lcom/hermes/android/webui/ChatWebActivity;->isBootstrapInstalled()Z
