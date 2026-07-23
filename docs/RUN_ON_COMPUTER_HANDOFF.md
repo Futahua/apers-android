@@ -23,6 +23,13 @@ The Desktop destination now reports live health rather than treating a saved
 pairing as proof of connectivity: **PC checking…**, **PC connected**, or
 **PC unreachable** is driven by encrypted poll success/failure.
 
+Tapping **Desktop** opens a searchable bottom sheet of the real, unarchived
+top-level Hermes PC sessions. Selecting one binds the current phone conversation
+to its stable Desktop `session_id`, loads a bounded user/assistant transcript,
+and resumes that exact session on later sends. **New Desktop session** clears the
+binding explicitly. The sheet dismisses by tapping outside it or using Android
+Back. The active Desktop title is shown in the composer target.
+
 Hermes Desktop now reconciles its visible local-session list every five seconds.
 This covers sessions written by another local Hermes surface (including the
 phone companion and CLI), which do not emit on the Desktop renderer's own
@@ -48,9 +55,8 @@ a direct path is unavailable; no public Apers/Papers relay is deployed.
 - **Persistence:** conversation `webui-414f073fab08` remained mapped to Hermes
   session `20260723_223742_682fba`. After restarting both the app and companion,
   asking for the previous token returned `REMOTE_TEST`; the session id did not
-  change. Hermes Desktop lists this same session as
-  `[Phone dispatch] REMOTE_TEST`, and opening the row displays the phone
-  transcript.
+  change. Legacy marker-prefixed sessions are given clean Desktop titles on
+  companion startup; new messages never add a transport marker to the prompt.
 - **Away from LAN:** Wi-Fi was disabled on the phone, leaving mobile data and
   Tailscale (`100.124.102.127`). The same main-chat conversation sent
   `Reply exactly CELLULAR_TAILSCALE_OK`; the companion received and acknowledged
@@ -62,6 +68,12 @@ a direct path is unavailable; no public Apers/Papers relay is deployed.
   external session `20260723_230254_e97305` was created. Its sidebar count
   changed from 10 to 11 and the new row appeared without a restart, proving the
   fix independently of initial application loading.
+- **Existing Desktop pickup:** the phone searched for and selected `Woohoo`
+  (`20260722_003409_b3eea8`), loaded 22 visible messages, then sent
+  `Reply_exactly_PHONE_PICKUP_OK`. The same PC session stored the new user turn
+  and `PHONE_PICKUP_OK` assistant reply. After an app refresh the phone restored
+  the `Woohoo` binding and transcript. Explicit UTF-8 subprocess decoding was
+  verified with `PHONE_PICKUP_UTF8_OK`.
 
 These tests prove remote execution and durable shared Hermes session state
 visible from both the phone UI and Hermes Desktop. They do not mirror the
