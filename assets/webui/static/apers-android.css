@@ -389,97 +389,6 @@ body.apers-android-host,
   color: var(--accent-text);
 }
 
-.apers-remote-activity {
-  background: color-mix(in srgb, var(--surface) 94%, var(--accent) 6%);
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  box-shadow: 0 8px 24px rgba(36, 32, 25, .08);
-  color: var(--muted);
-  margin: 0 auto 7px;
-  max-width: var(--composer-max, 900px);
-  padding: 8px 11px;
-  width: calc(100% - 2px);
-}
-
-.apers-remote-activity[hidden] {
-  display: none !important;
-}
-
-.apers-remote-activity-summary {
-  align-items: center;
-  display: flex;
-  font-size: 12px;
-  gap: 7px;
-  min-height: 20px;
-}
-
-.apers-remote-activity-dot {
-  animation: apers-remote-pulse 1.25s ease-in-out infinite;
-  background: var(--accent);
-  border-radius: 50%;
-  box-shadow: 0 0 0 3px var(--accent-bg);
-  flex: 0 0 auto;
-  height: 6px;
-  width: 6px;
-}
-
-.apers-remote-activity-label {
-  color: var(--text);
-  flex: 1;
-  font-weight: 600;
-  min-width: 0;
-}
-
-.apers-remote-activity-time {
-  font-variant-numeric: tabular-nums;
-  opacity: .7;
-}
-
-.apers-remote-activity-steps {
-  border-left: 1px solid var(--border-subtle);
-  margin: 5px 0 1px 3px;
-  padding-left: 12px;
-}
-
-.apers-remote-activity-step {
-  align-items: flex-start;
-  display: flex;
-  font-size: 11px;
-  gap: 7px;
-  line-height: 1.35;
-  padding: 3px 0;
-}
-
-.apers-remote-activity-step.is-running {
-  color: var(--accent-text);
-}
-
-.apers-remote-activity-step-mark {
-  flex: 0 0 10px;
-  font-family: ui-monospace, monospace;
-  text-align: center;
-}
-
-.apers-remote-activity-step-copy {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.apers-remote-activity-step-copy small {
-  color: var(--muted);
-  display: block;
-  font-family: ui-monospace, monospace;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-@keyframes apers-remote-pulse {
-  0%, 100% { opacity: .45; transform: scale(.85); }
-  50% { opacity: 1; transform: scale(1); }
-}
-
 @media (max-width: 640px) {
   .apers-android-host .sidebar {
     bottom: 0;
@@ -551,11 +460,6 @@ body.apers-android-host,
 
   .apers-android-host .composer-box {
     border-radius: 10px;
-  }
-
-  .apers-android-host .apers-remote-activity {
-    margin-bottom: 6px;
-    width: 100%;
   }
 
   .apers-android-host textarea#msg {

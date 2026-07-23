@@ -86,29 +86,6 @@
     if (typeof setComposerStatus === 'function') setComposerStatus(status || '');
     var button = document.getElementById('apersComputerTarget');
     if (button) button.classList.toggle('is-running', !!busy);
-    renderRemoteActivity();
-  }
-
-  function createRemoteActivity() {
-    var existing = document.getElementById('apersRemoteActivity');
-    if (existing) return existing;
-    var composer = document.getElementById('composerBox');
-    if (!composer || !composer.parentNode) return null;
-    var activity = document.createElement('div');
-    activity.id = 'apersRemoteActivity';
-    activity.className = 'apers-remote-activity';
-    activity.setAttribute('role', 'status');
-    activity.setAttribute('aria-live', 'polite');
-    activity.hidden = true;
-    activity.innerHTML =
-      '<div class="apers-remote-activity-summary">' +
-        '<span class="apers-remote-activity-dot" aria-hidden="true"></span>' +
-        '<span class="apers-remote-activity-label">Hermes is thinking</span>' +
-        '<span class="apers-remote-activity-time"></span>' +
-      '</div>' +
-      '<div class="apers-remote-activity-steps"></div>';
-    composer.parentNode.insertBefore(activity, composer);
-    return activity;
   }
 
   function activePendingOwner() {
@@ -121,80 +98,165 @@
     return null;
   }
 
-  function renderRemoteActivity() {
-    var card = createRemoteActivity();
-    if (!card) return;
-    var owner = target === 'computer' ? activePendingOwner() : null;
-    card.hidden = !owner;
-    if (!owner) return;
-    var activity = owner.activity || {};
-    var label = card.querySelector('.apers-remote-activity-label');
-    var elapsed = card.querySelector('.apers-remote-activity-time');
-    var steps = card.querySelector('.apers-remote-activity-steps');
-    label.textContent = activity.label || 'Hermes is thinking';
-    var started = Number(activity.started || owner.created || Date.now());
-    elapsed.textContent = Math.max(0, Math.round((Date.now() - started) / 1000)) + 's';
-    steps.textContent = '';
-    (Array.isArray(activity.steps) ? activity.steps.slice(-3) : []).forEach(function (step) {
-      var row = document.createElement('div');
-      row.className = 'apers-remote-activity-step ' +
-        (step.status === 'done' ? 'is-done' : 'is-running');
-      var mark = document.createElement('span');
-      mark.className = 'apers-remote-activity-step-mark';
-      mark.textContent = step.status === 'done' ? '✓' : '•';
-      var copy = document.createElement('span');
-      copy.className = 'apers-remote-activity-step-copy';
-      copy.textContent = step.label || 'Using a tool';
-      if (step.detail) {
-        var detail = document.createElement('small');
-        detail.textContent = step.detail;
-        copy.appendChild(detail);
-      }
-      row.appendChild(mark);
-      row.appendChild(copy);
-      steps.appendChild(row);
-    });
-    steps.hidden = !steps.childNodes.length;
+  function remoteStreamId(ref) {
+    return 'apers-remote-' + String(ref || 'task');
   }
 
-  function applyRemoteProgress(owner, event) {
-    var activity = owner.activity || {
-      started: owner.created || Date.now(),
-      label: 'Hermes is thinking',
-      steps: []
-    };
-    activity.label = String(event.label || 'Hermes is thinking');
-    if (!Array.isArray(activity.steps)) activity.steps = [];
-    if (event.phase === 'tool_started') {
-      activity.steps.push({
-        callId: String(event.call_id || Date.now()),
-        label: activity.label,
-        detail: String(event.detail || ''),
-        status: 'running'
+  function remoteToolCalls(owner) {
+    var tools = owner && owner.worklog && owner.worklog.tools;
+    if (!tools || typeof tools !== 'object') return [];
+    return Object.keys(tools).map(function (id) {
+      return tools[id];
+    }).filter(Boolean);
+  }
+
+  function beginNativeRemoteWorklog(owner, ref) {
+    if (!owner || target !== 'computer' || owner.sessionId !== activeSessionId()) return;
+    if (typeof S === 'undefined') return;
+    var streamId = remoteStreamId(ref);
+    S.toolCalls = remoteToolCalls(owner);
+    if (typeof ensureLiveWorklogShell === 'function') {
+      if (!S.toolCalls.length) S.activeStreamId = null;
+      else S.activeStreamId = streamId;
+      ensureLiveWorklogShell();
+      S.activeStreamId = streamId;
+    } else if (typeof appendThinking === 'function') {
+      S.activeStreamId = streamId;
+      appendThinking('', {
+        pending: true,
+        sessionId: activeSessionId(),
+        streamId: streamId
       });
-    } else if (event.phase === 'tool_completed') {
-      var callId = String(event.call_id || '');
-      var matched = false;
-      for (var i = activity.steps.length - 1; i >= 0; i--) {
-        if ((callId && activity.steps[i].callId === callId) ||
-            (!callId && activity.steps[i].status === 'running')) {
-          activity.steps[i].status = 'done';
-          matched = true;
-          break;
+    }
+  }
+
+  function storeRemoteToolStart(owner, ref, event) {
+    var thread = readThread(owner.sessionId);
+    owner.worklog = owner.worklog || { tools: {} };
+    owner.worklog.tools = owner.worklog.tools || {};
+    var callId = String(event.call_id || ('remote-tool-' + Date.now()));
+    var existing = owner.worklog.tools[callId];
+    if (existing) return existing;
+    var args = event.args && typeof event.args === 'object' ? event.args : {};
+    var messageIndex = thread.messages.length;
+    thread.messages.push({
+      role: 'assistant',
+      content: '',
+      tool_calls: [{
+        id: callId,
+        call_id: callId,
+        type: 'function',
+        function: {
+          name: String(event.tool || 'tool'),
+          arguments: JSON.stringify(args)
         }
-      }
-      if (!matched) {
-        activity.steps.push({
-          callId: callId,
-          label: activity.label,
-          detail: '',
-          status: 'done'
+      }],
+      _ts: Date.now() / 1000,
+      _computer: true,
+      _remoteActivity: true
+    });
+    var tool = {
+      id: callId,
+      tid: callId,
+      tool_call_id: callId,
+      name: String(event.tool || 'tool'),
+      args: args,
+      snippet: '',
+      preview: String(event.detail || ''),
+      done: false,
+      started_at: Number(event.started_at) || Date.now() / 1000,
+      assistant_msg_idx: messageIndex
+    };
+    owner.worklog.tools[callId] = tool;
+    saveThread(owner.sessionId, thread);
+    writeJson(PENDING_KEY, pending);
+    if (owner.sessionId === activeSessionId()) {
+      S.messages = thread.messages.slice();
+      beginNativeRemoteWorklog(owner, ref);
+      if (typeof appendLiveToolCard === 'function') {
+        appendLiveToolCard(tool, {
+          sessionId: activeSessionId(),
+          streamId: remoteStreamId(ref)
         });
       }
     }
-    owner.activity = activity;
+    return tool;
+  }
+
+  function storeRemoteToolCompletion(owner, ref, event) {
+    var callId = String(event.call_id || '');
+    var tool = callId && owner.worklog && owner.worklog.tools
+      ? owner.worklog.tools[callId]
+      : null;
+    if (!tool) tool = storeRemoteToolStart(owner, ref, event);
+    if (!tool) return;
+    var thread = readThread(owner.sessionId);
+    var hasResult = thread.messages.some(function (message) {
+      return message.role === 'tool' && message.tool_call_id === tool.tid;
+    });
+    if (!hasResult) {
+      thread.messages.push({
+        role: 'tool',
+        content: String(event.result || ''),
+        tool_call_id: tool.tid,
+        name: tool.name,
+        _ts: Date.now() / 1000,
+        _computer: true,
+        _remoteActivity: true
+      });
+    }
+    tool.done = true;
+    tool.snippet = String(event.result || '');
+    tool.duration = Math.max(
+      0, (Number(event.elapsed) || 0) -
+      Math.max(0, (Number(tool.started_at) || 0) - (Number(event.started_at) || 0)));
+    saveThread(owner.sessionId, thread);
     writeJson(PENDING_KEY, pending);
-    renderRemoteActivity();
+    if (owner.sessionId === activeSessionId()) {
+      S.messages = thread.messages.slice();
+      beginNativeRemoteWorklog(owner, ref);
+      if (typeof appendLiveToolCard === 'function') {
+        appendLiveToolCard(tool, {
+          sessionId: activeSessionId(),
+          streamId: remoteStreamId(ref)
+        });
+      }
+    }
+  }
+
+  function applyRemoteProgress(owner, ref, event) {
+    beginNativeRemoteWorklog(owner, ref);
+    if (event.phase === 'tool_started') {
+      storeRemoteToolStart(owner, ref, event);
+    } else if (event.phase === 'tool_completed') {
+      storeRemoteToolCompletion(owner, ref, event);
+    }
+  }
+
+  function settleUnfinishedRemoteTools(owner, thread, fallback, failed) {
+    remoteToolCalls(owner).forEach(function (tool) {
+      if (tool.done) return;
+      var text = String(fallback || (
+        failed ? 'Task ended before this tool returned.' : 'Completed.'));
+      tool.done = true;
+      tool.is_error = !!failed;
+      tool.snippet = text;
+      var hasResult = thread.messages.some(function (message) {
+        return message.role === 'tool' && message.tool_call_id === tool.tid;
+      });
+      if (!hasResult) {
+        thread.messages.push({
+          role: 'tool',
+          content: text,
+          tool_call_id: tool.tid,
+          name: tool.name,
+          _ts: Date.now() / 1000,
+          _computer: true,
+          _remoteActivity: true,
+          _error: !!failed
+        });
+      }
+    });
   }
 
   function renderThread(sessionId) {
@@ -207,6 +269,21 @@
         pending[id].sessionId === sessionId;
     });
     setComposerBusy(waiting, waiting ? 'Hermes is working on your computer…' : '');
+    if (waiting) {
+      var owner = activePendingOwner();
+      var ref = Object.keys(pending).find(function (id) {
+        return pending[id] === owner;
+      });
+      beginNativeRemoteWorklog(owner, ref);
+      remoteToolCalls(owner).forEach(function (tool) {
+        if (typeof appendLiveToolCard === 'function') {
+          appendLiveToolCard(tool, {
+            sessionId: sessionId,
+            streamId: remoteStreamId(ref)
+          });
+        }
+      });
+    }
   }
 
   function updateTargetUi() {
@@ -304,6 +381,9 @@
     });
     saveThread(sessionId, thread);
     input.value = '';
+    if (typeof _clearComposerDraft === 'function') {
+      _clearComposerDraft(sessionId, text, []);
+    }
     if (typeof autoResize === 'function') autoResize();
     renderThread(sessionId);
     setComposerBusy(true, 'Sending to Hermes on your computer…');
@@ -645,11 +725,7 @@
       sessionId: threadSessionId,
       conversationId: thread.conversationId,
       created: Date.now(),
-      activity: {
-        started: Date.now(),
-        label: 'Hermes is thinking',
-        steps: []
-      }
+      worklog: { tools: {} }
     };
     writeJson(PENDING_KEY, pending);
     saveThread(threadSessionId, thread);
@@ -675,7 +751,7 @@
       var unwrapped = unwrapComputerResult(result.text || '');
       if (unwrapped.indexOf(PROGRESS_PREFIX) === 0) {
         try {
-          applyRemoteProgress(owner, JSON.parse(
+          applyRemoteProgress(owner, ref, JSON.parse(
             unwrapped.slice(PROGRESS_PREFIX.length) || '{}'));
         } catch (_) {
           // A malformed progress update must not consume the actual task.
@@ -687,6 +763,8 @@
       thread.messages.forEach(function (message) {
         if (message._remoteRef === ref) message._pending = false;
       });
+      settleUnfinishedRemoteTools(
+        owner, thread, result.ok ? '' : unwrapped, !result.ok);
       thread.messages.push({
         role: 'assistant',
         content: unwrapped || (result.ok ? '(no output)' : 'Computer task failed.'),
@@ -697,6 +775,12 @@
       saveThread(owner.sessionId, thread);
       delete pending[ref];
       accepted.push(String(result.id));
+      if (typeof S !== 'undefined') {
+        if (typeof clearLiveToolCards === 'function') clearLiveToolCards();
+        S.activeStreamId = null;
+        S.toolCalls = [];
+      }
+      setComposerBusy(false, '');
       renderThread(owner.sessionId);
     });
     if (accepted.length) {
@@ -706,7 +790,6 @@
         host.ackComputerResults(JSON.stringify(accepted));
       }
     }
-    renderRemoteActivity();
   }
 
   function handleControlResult(owner, result) {
@@ -750,12 +833,21 @@
       var thread = {
         conversationId: owner.conversationId,
         messages: (Array.isArray(value.messages) ? value.messages : []).map(function (message) {
-          return {
+          var mapped = {
             role: message.role,
             content: String(message.content || ''),
             _ts: Number(message.timestamp) || Date.now() / 1000,
             _computer: true
           };
+          if (Array.isArray(message.tool_calls)) {
+            mapped.tool_calls = message.tool_calls;
+          }
+          if (message.tool_call_id) {
+            mapped.tool_call_id = String(message.tool_call_id);
+          }
+          if (message.name) mapped.name = String(message.name);
+          if (message.reasoning) mapped.reasoning = String(message.reasoning);
+          return mapped;
         })
       };
       saveThread(owner.sessionId, thread);
@@ -860,13 +952,11 @@
     revealAndroidActions();
     installDrawerBackdrop();
     createDesktopPicker();
-    createRemoteActivity();
     window.addEventListener('popstate', function () {
       if (pickerOpen) closeDesktopSessions(true);
     });
     updateTargetUi();
     setInterval(function () {
-      renderRemoteActivity();
       var current = activeSessionId();
       if (target === 'computer' && current && current !== lastActiveSessionId) {
         lastActiveSessionId = current;
