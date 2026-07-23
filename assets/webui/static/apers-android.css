@@ -119,6 +119,38 @@ body.apers-android-host,
   color: #a85645;
 }
 
+.apers-project-color-field {
+  margin-top: 14px;
+}
+
+.apers-project-color-label {
+  color: #625f58;
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 9px;
+}
+
+.apers-project-color-swatches {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(8, 1fr);
+}
+
+.apers-project-color-swatch {
+  aspect-ratio: 1;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(35, 33, 29, .14);
+  min-width: 0;
+  padding: 0;
+}
+
+.apers-project-color-swatch.is-selected {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px #292823;
+}
+
 .apers-sidebar-destination.is-linked:first-child svg {
   color: #397b78;
 }

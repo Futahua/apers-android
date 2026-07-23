@@ -869,22 +869,108 @@
     body.hidden = !!collapsed[projectId];
   }
 
-  async function createPhoneProject() {
-    var name = await showPromptDialog({
-      message: 'Create project',
+  function projectPalette() {
+    return (typeof PROJECT_COLORS !== 'undefined' && PROJECT_COLORS.length)
+      ? PROJECT_COLORS : ['#7cb9ff', '#f5c542', '#e94560', '#50c878'];
+  }
+
+  function mountProjectColorPicker(selectedColor, onChange) {
+    var field = document.createElement('div');
+    field.className = 'apers-project-color-field';
+    var label = document.createElement('span');
+    label.className = 'apers-project-color-label';
+    label.textContent = 'Color';
+    var swatches = document.createElement('div');
+    swatches.className = 'apers-project-color-swatches';
+    projectPalette().forEach(function (hex) {
+      var swatch = document.createElement('button');
+      swatch.type = 'button';
+      swatch.className = 'apers-project-color-swatch';
+      swatch.style.background = hex;
+      swatch.setAttribute('aria-label', 'Select color ' + hex);
+      swatch.classList.toggle('is-selected', hex === selectedColor);
+      swatch.addEventListener('click', function () {
+        selectedColor = hex;
+        Array.prototype.forEach.call(swatches.children, function (item) {
+          item.classList.toggle('is-selected', item === swatch);
+        });
+        onChange(hex);
+      });
+      swatches.appendChild(swatch);
+    });
+    field.appendChild(label);
+    field.appendChild(swatches);
+    return field;
+  }
+
+  async function showCreateProjectDialog(defaultColor) {
+    var selectedColor = defaultColor;
+    var pending = showPromptDialog({
+      title: 'Create project',
+      message: 'Name and color',
       confirmLabel: 'Create',
       placeholder: 'Project name'
     });
-    name = String(name || '').trim();
-    if (!name) return;
-    var palette = (typeof PROJECT_COLORS !== 'undefined' && PROJECT_COLORS.length)
-      ? PROJECT_COLORS : ['#7cb9ff', '#f5c542', '#e94560', '#50c878'];
+    var dialog = document.getElementById('appDialog');
+    var actions = dialog && dialog.querySelector('.app-dialog-actions');
+    var picker = mountProjectColorPicker(selectedColor, function (hex) {
+      selectedColor = hex;
+    });
+    if (dialog) dialog.insertBefore(picker, actions || null);
+    try {
+      var name = await pending;
+      if (name === null) return null;
+      return { name: String(name || '').trim(), color: selectedColor };
+    } finally {
+      picker.remove();
+    }
+  }
+
+  async function chooseProjectColor(group) {
+    var selectedColor = (group.project && group.project.color) ||
+      projectPalette()[0];
+    var pending = showConfirmDialog({
+      title: 'Change project color',
+      message: group.name,
+      confirmLabel: 'Save'
+    });
+    var dialog = document.getElementById('appDialog');
+    var actions = dialog && dialog.querySelector('.app-dialog-actions');
+    var picker = mountProjectColorPicker(selectedColor, function (hex) {
+      selectedColor = hex;
+    });
+    if (dialog) dialog.insertBefore(picker, actions || null);
+    try {
+      if (!await pending) return;
+      await api('/api/projects/rename', {
+        method: 'POST',
+        body: JSON.stringify({
+          project_id: group.id,
+          name: group.name,
+          color: selectedColor
+        })
+      });
+      await renderSessionList({ deferWhileInteracting: false });
+      showToast('Project color updated.', 2200);
+    } catch (error) {
+      showToast('Color update failed: ' + String(error.message || error),
+        3200, 'error');
+    } finally {
+      picker.remove();
+    }
+  }
+
+  async function createPhoneProject() {
+    var palette = projectPalette();
+    var project = await showCreateProjectDialog(
+      palette[_allProjects.length % palette.length]);
+    if (!project || !project.name) return;
     try {
       var result = await api('/api/projects/create', {
         method: 'POST',
         body: JSON.stringify({
-          name: name,
-          color: palette[_allProjects.length % palette.length]
+          name: project.name,
+          color: project.color
         })
       });
       if (result.project) _allProjects.push(result.project);
@@ -902,7 +988,8 @@
         label: 'Rename project',
         run: async function () {
           var name = await showPromptDialog({
-            message: 'Rename project',
+            title: 'Rename project',
+            message: 'Project name',
             confirmLabel: 'Rename',
             value: group.name,
             placeholder: 'Project name'
@@ -925,6 +1012,10 @@
               3200, 'error');
           }
         }
+      },
+      {
+        label: 'Change project color',
+        run: function () { chooseProjectColor(group); }
       },
       {
         label: 'Delete project and conversations',
