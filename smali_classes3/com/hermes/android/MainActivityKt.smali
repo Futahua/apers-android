@@ -43441,20 +43441,9 @@
 
     if-eqz v55, :cond_29
 
-    .line 3910
-    const-string v0, "chatskin_mode"
-
-    # Desktop-style chat surface defaulted ON (was default false): pass true as the
-    # SharedPreferences default so a fresh install lands on the Hermes-style chat view
-    # whenever the chat surface is available (v55). User toggle still overrides via prefs.
-    const/4 v2, 0x1
-
-    invoke-interface {v4, v0, v2}, Landroid/content/SharedPreferences;->getBoolean(Ljava/lang/String;Z)Z
-
-    move-result v0
-
-    if-eqz v0, :cond_29
-
+    # Desktop-style chat surface FORCED ON whenever available (v55), ignoring the stored
+    # chatskin_mode pref entirely. The old terminal view is still reachable via the in-app
+    # toggle for that one session, but every session starts in the Hermes-style chat view.
     const/4 v0, 0x1
 
     goto :goto_15

@@ -78,6 +78,21 @@
 
     invoke-static {p2, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
 
+    # Force-enable the "chatskin" Labs feature (Hermes-Desktop-style chat surface) so it
+    # is always on without the user having to toggle it in Labs settings.
+    const-string v0, "chatskin"
+
+    invoke-virtual {p2, v0}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+
+    move-result v0
+
+    if-eqz v0, :not_chatskin
+
+    const/4 p1, 0x1
+
+    return p1
+
+    :not_chatskin
     .line 20
     const-string v0, "labs"
 

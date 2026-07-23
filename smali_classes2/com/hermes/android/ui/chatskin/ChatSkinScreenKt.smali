@@ -281,8 +281,8 @@
 
     const/4 v6, 0x0
 
-    # AssistantBubble = solid Papers dark card #111124
-    const-wide v0, 0xff111124L
+    # AssistantBubble = TRANSPARENT -> assistant renders as plain borderless text (spec)
+    const-wide v0, 0x0L
 
     invoke-static {v0, v1}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
 
@@ -291,8 +291,8 @@
     sput-wide v0, Lcom/hermes/android/ui/chatskin/ChatSkinScreenKt;->AssistantBubble:J
 
     .line 66
-    # ToolCard = slightly lifted Papers dark card #161a2e
-    const-wide v0, 0xff161a2eL
+    # ToolCard = TRANSPARENT -> tool calls render as quiet inline rows, not cards (spec)
+    const-wide v0, 0x0L
 
     invoke-static {v0, v1}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
 
