@@ -1,6 +1,6 @@
 # "Run on Computer" — implementation and current transport
 
-## Current state (2026-07-23)
+## Current state (2026-07-24)
 
 The Papers companion is installed and auto-started. Its encrypted broker listens
 on both the current LAN address (`192.168.192.102:51379`) and the machine's
@@ -42,11 +42,14 @@ unacknowledged so the main chat can render and acknowledge them, including after
 the app is closed and reopened. Ordinary native mesh-task results keep their
 existing notification behavior.
 
-The same envelope now carries transient `__APERS_PROGRESS_V1__` events while a
-turn is active. The main chat acknowledges progress separately, keeps the task
-pending, and shows a compact Hermes-style activity card above the composer with
-elapsed time and recent tool actions. The final result removes the card and is
-stored in the shared conversation normally.
+The same envelope now carries `__APERS_PROGRESS_V1__` events while a turn is
+active. The main chat acknowledges progress separately and feeds each tool start
+and result into the same inline Worklog renderer used by native phone runs. The
+user prompt stays in the transcript while Hermes works; the Worklog moves from
+Thinking to live tool rows, then settles into the normal collapsible mobile
+Worklog beside the final answer. Its assistant tool calls and linked tool-result
+messages are stored in the conversation, so completed activity survives target
+switches, app restarts, and rebinding an existing Desktop session.
 
 The companion routes only short, clearly conversational follow-ups through a
 no-tool fast path. Action requests, current-information questions, URLs, paths,
@@ -58,7 +61,7 @@ Tailscale supplies reachability only. NaCl Box still authenticates and encrypts
 the application payload end-to-end. Tailscale may use its private DERP relay when
 a direct path is unavailable; no public Apers/Papers relay is deployed.
 
-## Verified acceptance run (2026-07-23)
+## Verified acceptance run (updated 2026-07-24)
 
 - **LAN, real main composer:** the installed Android app sent `REMOTE_TEST`.
   The companion received it from `192.168.192.101`, Hermes returned
@@ -89,11 +92,19 @@ a direct path is unavailable; no public Apers/Papers relay is deployed.
 - **Fast conversational route:** repeating `whyd you take 30 sec to reply` in
   that same large `Woohoo` session completed in 9.9 seconds with no tool calls,
   versus 44.7 seconds and four unnecessary file searches before routing.
-- **Visible actionable work:** `Search the computer for
+- **Native persistent Worklog:** `Search the computer for
   definitely-not-here-apers-ui-test.txt and reply TOOL_UI_OK` retained the full
-  toolset. The phone displayed the live elapsed card and both `Searching files`
-  steps, then removed it when `TOOL_UI_OK` arrived. The final and tool messages
-  were stored under the same Desktop session id.
+  toolset. The phone displayed its ordinary inline mobile Worklog with both file
+  searches while the prompt remained visible. The completed Worklog collapsed
+  normally beside `TOOL_UI_OK`, and the assistant tool calls plus tool results
+  reappeared after reloading the Desktop session.
+- **Final installed-build check (2026-07-24):** asset revision 16 sent `Search
+  the computer for definitely-not-here-final-worklog.txt and reply
+  FINAL_NATIVE_OK` through the main composer. The native Worklog moved from
+  `Thinking` to the live search row, settled as `Searched workspace 2 times`,
+  and returned the exact stored answer `FINAL_NATIVE_OK`. After force-stopping
+  and reopening the app, the completed Worklog was still present and the sent
+  prompt did not reappear as a composer draft.
 
 These tests prove remote execution and durable shared Hermes session state
 visible from both the phone UI and Hermes Desktop. They do not mirror the
