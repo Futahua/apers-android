@@ -76,6 +76,49 @@ body.apers-android-host,
   box-shadow: 0 1px 2px rgba(30, 27, 22, .04);
 }
 
+.apers-android-host .app-dialog {
+  background: #f8f7f3;
+  border-color: #c97865;
+  color: #292823;
+}
+
+.apers-android-host .app-dialog-title {
+  color: #292823;
+}
+
+.apers-android-host .app-dialog-desc {
+  color: #625f58;
+}
+
+.apers-android-host .app-dialog-close {
+  background: rgba(35, 33, 29, .04);
+  color: #625f58;
+}
+
+.apers-android-host .app-dialog-input {
+  background: #fff;
+  border-color: #c7c3ba;
+  color: #292823;
+  caret-color: #292823;
+}
+
+.apers-android-host .app-dialog-input::placeholder {
+  color: #77736b;
+  opacity: 1;
+}
+
+.apers-android-host .app-dialog-btn {
+  background: #fff;
+  border-color: #c7c3ba;
+  color: #4f4c46;
+}
+
+.apers-android-host .app-dialog-btn.confirm {
+  background: rgba(201, 120, 101, .1);
+  border-color: #c97865;
+  color: #a85645;
+}
+
 .apers-sidebar-destination.is-linked:first-child svg {
   color: #397b78;
 }
@@ -154,6 +197,44 @@ body.apers-android-host,
   text-transform: uppercase;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.apers-project-heading-manageable {
+  cursor: default;
+  margin-right: 22px;
+  position: relative;
+}
+
+.apers-project-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apers-project-add {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  display: flex;
+  font: inherit;
+  font-size: 18px;
+  height: 24px;
+  justify-content: center;
+  margin-left: auto;
+  padding: 0;
+  width: 24px;
+}
+
+.apers-project-add:active {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+
+.apers-project-grip {
+  height: auto;
 }
 
 .apers-project-heading.long-pressing {
