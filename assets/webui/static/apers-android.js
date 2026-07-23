@@ -36,6 +36,18 @@
   var routes = readJson(ROUTES_KEY, {});
   var dispatching = {};
   var controlRequests = {};
+  // A control request that is accepted by the native bridge but never answered
+  // by the companion (PC asleep, companion crash, dropped inbox envelope) must
+  // not leave the Desktop UI stuck forever. Both stages get a wall-clock deadline
+  // enforced by the existing poll loop: controlRequests before native dispatch
+  // confirms, pending[...] entries with a .kind afterward. 45s > the 30s phone
+  // API timeout, so a genuinely slow /api/session/new is not cut off early.
+  var CONTROL_TIMEOUT_MS = 45000;
+  // Guards the window between a Desktop-session tap and shell/bind resolution so
+  // repeated taps cannot mint parallel shells or duplicate bind requests, and
+  // lets a retry reuse the shell a prior attempt already created.
+  var preparingDesktopId = '';
+  var desktopRetry = null;
   var cachedDesktopSessions = readJson(DESKTOP_CATALOG_KEY, []);
   var desktopSessions = Array.isArray(cachedDesktopSessions)
     ? cachedDesktopSessions : [];
@@ -454,6 +466,7 @@
     sidebarMode = mode === 'desktop' ? 'desktop' : 'phone';
     sidebarState = '';
     sidebarStateIsError = false;
+    setDesktopRetry(null);
     reflectSidebarMode();
     var newButton = document.getElementById('btnNewChat');
     if (newButton) {
@@ -810,6 +823,22 @@
   }
 
   function appendSidebarState(list, message, isError) {
+    // An error state with a registered retry becomes a button so the user has a
+    // one-tap recovery instead of a dead-end message.
+    if (isError && typeof desktopRetry === 'function') {
+      var retry = desktopRetry;
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'apers-sidebar-state is-error apers-sidebar-state-retry';
+      button.textContent = message;
+      button.addEventListener('click', function () {
+        setDesktopRetry(null);
+        showPickerState('', false);
+        retry();
+      });
+      list.appendChild(button);
+      return;
+    }
     var state = document.createElement('div');
     state.className = 'apers-sidebar-state' + (isError ? ' is-error' : '');
     state.textContent = message;
@@ -1541,6 +1570,7 @@
     writeJson(DESKTOP_CATALOG_KEY, desktopSessions);
     sidebarState = '';
     sidebarStateIsError = false;
+    setDesktopRetry(null);
     if (sidebarMode === 'desktop') {
       renderUnifiedSidebar();
       return;
@@ -1626,7 +1656,8 @@
     controlRequests[conversation] = Object.assign({
       kind: kind,
       sessionId: sessionId,
-      conversationId: conversationId(sessionId)
+      conversationId: conversationId(sessionId),
+      created: Date.now()
     }, extra || {});
     host.sendToComputer(conversation, prompt);
   }
@@ -1669,7 +1700,15 @@
       { desktopSessionId: desktopSessionId });
   }
 
-  async function ensureDesktopShell() {
+  async function ensureDesktopShell(desktopSessionId) {
+    // Reuse before create so a retry after a failed bind never orphans shells.
+    // A prior attempt may have already minted a Desktop shell (via a successful
+    // newSession that then failed at the bind stage) — that shell is the active
+    // Desktop conversation and is reused here rather than duplicated.
+    if (desktopSessionId) {
+      var existing = localShellForDesktop(desktopSessionId);
+      if (existing) return existing;
+    }
     var current = activeSessionId();
     if (isDesktopConversation(current)) return current;
     await newSession(undefined, { worktree: false });
@@ -1690,11 +1729,42 @@
         showPickerState('Hermes PC is unreachable.', true);
         return;
       }
+      // Double-tap guard: a second tap on the same (or any) uncached Desktop
+      // session while a prepare is in flight must not start a parallel shell.
+      if (preparingDesktopId) return;
+      preparingDesktopId = String(desktopSessionId);
+      setDesktopRetry(null);
       showPickerState('Preparing this Desktop conversation…', false);
-      sessionId = await ensureDesktopShell();
+      try {
+        sessionId = await ensureDesktopShell(desktopSessionId);
+      } catch (err) {
+        // A rejected/timed-out /api/session/new (phone backend) previously left
+        // "Preparing…" on screen indefinitely. Surface a bounded, actionable
+        // error and keep the catalogue usable; retry reuses any shell already made.
+        preparingDesktopId = '';
+        var timedOut = err && (err.timeout === true || err.name === 'TimeoutError');
+        showDesktopError(
+          timedOut
+            ? 'Preparing this conversation timed out. Tap to try again.'
+            : 'Could not prepare this conversation on the phone. Tap to try again.',
+          function () { bindDesktopSession(desktopSessionId, false); });
+        return;
+      }
+      preparingDesktopId = '';
     }
-    if (!sessionId || hasPendingControl('bind')) return;
-    if (!silent) showPickerState('Loading conversation…', false);
+    if (!sessionId || hasPendingControl('bind')) {
+      // A bind is already in flight (e.g. a silent auto-rebind); do not stack a
+      // second dispatch. The in-flight bind owns the loading state, so clear any
+      // "Preparing…" text this non-silent attempt put up rather than stranding it.
+      if (!silent && sidebarState === 'Preparing this Desktop conversation…') {
+        showPickerState('', false);
+      }
+      return;
+    }
+    if (!silent) {
+      setDesktopRetry(null);
+      showPickerState('Loading conversation…', false);
+    }
     dispatchControl(
       CONTROL_BIND_ID,
       'bind',
@@ -1795,6 +1865,57 @@
     });
   }
 
+  // Records the action that a "Tap to try again" affordance re-runs, and reflects
+  // it into whichever surface (unified sidebar or picker) is currently visible.
+  function setDesktopRetry(action) {
+    desktopRetry = typeof action === 'function' ? action : null;
+  }
+
+  function showDesktopError(message, retryAction) {
+    setDesktopRetry(retryAction);
+    showPickerState(message, true);
+  }
+
+  // Expire control requests that were accepted but never answered so a stuck
+  // "Loading conversation…" (or any control op) resolves into an actionable
+  // error instead of hanging. Runs from the existing poll loop. A control op
+  // waiting on a bind result offers a safe retry that reuses the shell.
+  function expireStaleControls() {
+    var now = Date.now();
+    var expired = false;
+    var expiredBind = null;
+    Object.keys(controlRequests).forEach(function (conversation) {
+      var control = controlRequests[conversation];
+      if (!control || !control.created) return;
+      if (now - control.created <= CONTROL_TIMEOUT_MS) return;
+      delete controlRequests[conversation];
+      expired = true;
+      if (control.kind === 'bind' && !control.silent) expiredBind = control;
+    });
+    Object.keys(pending).forEach(function (id) {
+      var owner = pending[id];
+      if (!owner || !owner.kind || !owner.created) return;
+      if (now - owner.created <= CONTROL_TIMEOUT_MS) return;
+      delete pending[id];
+      expired = true;
+      if (owner.kind === 'bind' && !owner.silent) expiredBind = owner;
+    });
+    if (!expired) return;
+    writeJson(PENDING_KEY, pending);
+    if (expiredBind) {
+      var desktopSessionId = expiredBind.desktopSessionId;
+      showDesktopError(
+        'The computer did not respond. Tap to try again.',
+        function () { bindDesktopSession(desktopSessionId, false); });
+    } else if (sidebarState === 'Loading conversation…' ||
+               sidebarState === 'Preparing this Desktop conversation…' ||
+               sidebarState === 'Preparing a new Desktop session…') {
+      // A non-bind control (or a silent bind) was the only thing keeping a
+      // loading state up; clear it so the catalogue is usable again.
+      showPickerState('The computer did not respond. Please try again.', true);
+    }
+  }
+
   function closeSidebarIfOpen() {
     var sidebar = document.querySelector('.sidebar');
     if (!sidebar || !sidebar.classList.contains('mobile-open')) return false;
@@ -1833,14 +1954,25 @@
         connectionChecked = true;
         updateTargetUi();
         if (!control.silent) {
-          showPickerState(
-            'Computer connection failed: ' + String(event.error || 'Unknown error'),
-            true);
+          if (control.kind === 'bind') {
+            var retryDesktopId = control.desktopSessionId;
+            showDesktopError(
+              'Computer connection failed: ' + String(event.error || 'Unknown error') +
+                '. Tap to try again.',
+              function () { bindDesktopSession(retryDesktopId, false); });
+          } else {
+            showPickerState(
+              'Computer connection failed: ' + String(event.error || 'Unknown error'),
+              true);
+          }
         }
         return;
       }
       online = true;
       connectionChecked = true;
+      // Restart the deadline clock from native-accept so a slow-to-answer
+      // companion is timed from when the PC actually received the request.
+      control.created = Date.now();
       pending[String(event.id)] = control;
       writeJson(PENDING_KEY, pending);
       updateTargetUi();
@@ -2020,7 +2152,14 @@
     }
     if (!result.ok || value.error) {
       if (!owner.silent) {
-        showPickerState(String(value.error || 'Desktop request failed.'), true);
+        if (owner.kind === 'bind') {
+          var failedDesktopId = owner.desktopSessionId;
+          showDesktopError(
+            String(value.error || 'Desktop request failed.') + ' Tap to try again.',
+            function () { bindDesktopSession(failedDesktopId, false); });
+        } else {
+          showPickerState(String(value.error || 'Desktop request failed.'), true);
+        }
       }
       return;
     }
@@ -2220,6 +2359,7 @@
           !hasPendingControl('bind') && Date.now() - lastDesktopSync > 20000) {
         bindDesktopSession(binding.id, true);
       }
+      expireStaleControls();
       pollComputer();
     }, 1500);
     setTimeout(pollComputer, 400);

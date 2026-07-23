@@ -366,6 +366,22 @@ body.apers-android-host,
   color: var(--accent-text);
 }
 
+button.apers-sidebar-state-retry {
+  background: rgba(207, 128, 109, .12);
+  border: 1px solid var(--accent-text);
+  border-radius: 10px;
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  font-size: 11px;
+  margin: 12px 12px 6px;
+  width: calc(100% - 24px);
+}
+
+button.apers-sidebar-state-retry:active {
+  background: rgba(207, 128, 109, .22);
+}
+
 .apers-session-actions {
   align-items: flex-end;
   background: rgba(30, 28, 24, .18);
