@@ -180,6 +180,18 @@ body.apers-android-host,
   overscroll-behavior: contain;
 }
 
+.apers-projects-toolbar {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .09em;
+  min-height: 34px;
+  padding: 5px 10px 3px 11px;
+  text-transform: uppercase;
+}
+
 .apers-project-group {
   margin: 0 0 8px;
 }

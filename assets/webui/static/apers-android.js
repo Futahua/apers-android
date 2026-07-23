@@ -619,16 +619,6 @@
       projectIds[project.project_id] = true;
       groups.push({ id: project.project_id, name: project.name || 'Project', project: project, rows: [] });
     });
-    var projectOrder = readJson(PROJECT_ORDER_KEY, []);
-    if (Array.isArray(projectOrder)) {
-      groups.sort(function (a, b) {
-        var ai = projectOrder.indexOf(a.id);
-        var bi = projectOrder.indexOf(b.id);
-        if (ai < 0) ai = Number.MAX_SAFE_INTEGER;
-        if (bi < 0) bi = Number.MAX_SAFE_INTEGER;
-        return ai - bi;
-      });
-    }
     var unassigned = { id: '', name: 'Unassigned', project: null, rows: [] };
     rows.forEach(function (session) {
       var group = groups.find(function (item) {
@@ -637,12 +627,38 @@
       (group || unassigned).rows.push(session);
     });
     groups.push(unassigned);
-    var addButtonPlaced = false;
+    var projectOrder = readJson(PROJECT_ORDER_KEY, []);
+    if (Array.isArray(projectOrder)) {
+      groups.sort(function (a, b) {
+        var ai = projectOrder.indexOf(projectOrderId(a.id));
+        var bi = projectOrder.indexOf(projectOrderId(b.id));
+        if (ai < 0) ai = Number.MAX_SAFE_INTEGER;
+        if (bi < 0) bi = Number.MAX_SAFE_INTEGER;
+        return ai - bi;
+      });
+    }
+    var toolbar = document.createElement('div');
+    toolbar.className = 'apers-projects-toolbar';
+    var toolbarLabel = document.createElement('span');
+    toolbarLabel.textContent = 'Projects';
+    var addButton = document.createElement('button');
+    addButton.type = 'button';
+    addButton.className = 'apers-project-add';
+    addButton.setAttribute('aria-label', 'Add project');
+    addButton.textContent = '+';
+    addButton.addEventListener('click', function (event) {
+      event.preventDefault();
+      createPhoneProject();
+    });
+    toolbar.appendChild(toolbarLabel);
+    toolbar.appendChild(addButton);
+    list.appendChild(toolbar);
     groups.forEach(function (group) {
       if (query && !group.rows.length) return;
       var wrapper = document.createElement('section');
       wrapper.className = 'apers-project-group';
       wrapper.dataset.projectId = group.id;
+      wrapper.dataset.projectOrderId = projectOrderId(group.id);
       var header = document.createElement('div');
       header.className = 'apers-project-heading apers-project-heading-manageable';
       if (group.project && group.project.color) {
@@ -655,28 +671,11 @@
       label.className = 'apers-project-label';
       label.textContent = group.name;
       header.appendChild(label);
-      if (!addButtonPlaced) {
-        addButtonPlaced = true;
-        var addButton = document.createElement('button');
-        addButton.type = 'button';
-        addButton.className = 'apers-project-add';
-        addButton.setAttribute('aria-label', 'Add project');
-        addButton.textContent = '+';
-        addButton.addEventListener('pointerdown', function (event) {
-          event.stopPropagation();
-        });
-        addButton.addEventListener('click', function (event) {
-          event.preventDefault();
-          event.stopPropagation();
-          createPhoneProject();
-        });
-        header.appendChild(addButton);
-      }
       var body = document.createElement('div');
       body.className = 'apers-project-body';
       body.dataset.projectId = group.id;
       group.rows.forEach(function (session) { appendSessionRow(body, session); });
-      var collapsedId = group.id || '__unassigned__';
+      var collapsedId = projectOrderId(group.id);
       var collapsed = !query &&
         isProjectCollapsed(PHONE_PROJECT_COLLAPSED_KEY, collapsedId);
       wrapper.classList.toggle('is-collapsed', collapsed);
@@ -692,9 +691,7 @@
           if (group.project) openPhoneProjectActions(group);
         }
       });
-      if (group.id) {
-        attachProjectGrip(header, wrapper, persistProjectDomOrder);
-      }
+      attachProjectGrip(header, wrapper, persistProjectDomOrder);
       list.appendChild(wrapper);
     });
     if (!rows.length && query) {
@@ -769,8 +766,8 @@
     var projectOrder = readJson(DESKTOP_PROJECT_ORDER_KEY, []);
     var groups = Object.keys(groupsById).map(function (id) { return groupsById[id]; });
     groups.sort(function (a, b) {
-      var ai = projectOrder.indexOf(a.id);
-      var bi = projectOrder.indexOf(b.id);
+      var ai = projectOrder.indexOf(projectOrderId(a.id));
+      var bi = projectOrder.indexOf(projectOrderId(b.id));
       if (ai < 0) ai = Number.MAX_SAFE_INTEGER;
       if (bi < 0) bi = Number.MAX_SAFE_INTEGER;
       if (ai !== bi) return ai - bi;
@@ -780,6 +777,7 @@
       var wrapper = document.createElement('section');
       wrapper.className = 'apers-project-group apers-desktop-project-group';
       wrapper.dataset.desktopProjectId = group.id;
+      wrapper.dataset.desktopProjectOrderId = projectOrderId(group.id);
       var header = document.createElement('div');
       header.className = 'apers-project-heading apers-project-heading-manageable';
       var label = document.createElement('span');
@@ -789,7 +787,7 @@
       var body = document.createElement('div');
       body.className = 'apers-project-body';
       group.rows.forEach(function (session) { appendDesktopRow(body, session); });
-      var collapsedId = group.id || '__unassigned__';
+      var collapsedId = projectOrderId(group.id);
       var collapsed = !query &&
         isProjectCollapsed(DESKTOP_PROJECT_COLLAPSED_KEY, collapsedId);
       wrapper.classList.toggle('is-collapsed', collapsed);
@@ -803,9 +801,7 @@
         },
         menu: function () {}
       });
-      if (group.id) {
-        attachProjectGrip(header, wrapper, persistDesktopProjectDomOrder);
-      }
+      attachProjectGrip(header, wrapper, persistDesktopProjectDomOrder);
       list.appendChild(wrapper);
     });
   }
@@ -837,8 +833,9 @@
 
   function persistProjectDomOrder() {
     var ids = Array.prototype.map.call(
-      document.querySelectorAll('#sessionList .apers-project-group[data-project-id]:not([data-project-id=""])'),
-      function (group) { return group.dataset.projectId; });
+      document.querySelectorAll(
+        '#sessionList .apers-project-group[data-project-order-id]'),
+      function (group) { return group.dataset.projectOrderId; });
     writeJson(PROJECT_ORDER_KEY, ids);
   }
 
@@ -846,9 +843,13 @@
     var ids = Array.prototype.map.call(
       document.querySelectorAll(
         '#sessionList .apers-desktop-project-group' +
-        '[data-desktop-project-id]:not([data-desktop-project-id=""])'),
-      function (group) { return group.dataset.desktopProjectId; });
+        '[data-desktop-project-order-id]'),
+      function (group) { return group.dataset.desktopProjectOrderId; });
     writeJson(DESKTOP_PROJECT_ORDER_KEY, ids);
+  }
+
+  function projectOrderId(projectId) {
+    return projectId || '__unassigned__';
   }
 
   function isProjectCollapsed(storageKey, projectId) {
@@ -1016,9 +1017,8 @@
     var startY = 0;
     var pointerId = null;
     var selector = wrapper.classList.contains('apers-desktop-project-group')
-      ? '.apers-desktop-project-group[data-desktop-project-id]' +
-        ':not([data-desktop-project-id=""])'
-      : '.apers-project-group[data-project-id]:not([data-project-id=""])';
+      ? '.apers-desktop-project-group[data-desktop-project-order-id]'
+      : '.apers-project-group[data-project-order-id]';
     grip.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
