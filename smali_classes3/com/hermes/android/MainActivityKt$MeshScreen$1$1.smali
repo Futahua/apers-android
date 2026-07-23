@@ -606,6 +606,16 @@
 
     .line 2115
     :cond_d
+    iget-object p1, p0, Lcom/hermes/android/MainActivityKt$MeshScreen$1$1;->$context:Landroidx/appcompat/app/AppCompatActivity;
+
+    iget-object v1, p0, Lcom/hermes/android/MainActivityKt$MeshScreen$1$1;->$controller:Lcom/hermes/android/mesh/MeshController;
+
+    iget-object v2, p0, Lcom/hermes/android/MainActivityKt$MeshScreen$1$1;->$paired$delegate:Landroidx/compose/runtime/MutableState;
+
+    iget-object v3, p0, Lcom/hermes/android/MainActivityKt$MeshScreen$1$1;->$online$delegate:Landroidx/compose/runtime/MutableState;
+
+    invoke-static {p1, v1, v2, v3}, Lcom/hermes/android/handoff/AutoPair;->start(Landroid/content/Context;Lcom/hermes/android/mesh/MeshController;Landroidx/compose/runtime/MutableState;Landroidx/compose/runtime/MutableState;)V
+
     sget-object p1, Lkotlin/Unit;->INSTANCE:Lkotlin/Unit;
 
     return-object p1
