@@ -30,7 +30,7 @@
     .line 0
     iget-object v0, p0, Lcom/hermes/android/webui/ChatWebActivity$$ExternalSyntheticLambda4;->f$0:Lcom/hermes/android/webui/ChatWebActivity;
 
-    invoke-static {v0, p1}, Lcom/hermes/android/webui/ChatWebActivity;->$r8$lambda$syr_jx17WEBf_vEgars1U6caLk4(Lcom/hermes/android/webui/ChatWebActivity;Landroid/view/View;)V
+    invoke-static {v0, p1}, Lcom/hermes/android/webui/ChatWebActivity;->$r8$lambda$ooiSfqetdzqKVvCc--y4IA8OhwU(Lcom/hermes/android/webui/ChatWebActivity;Landroid/view/View;)V
 
     return-void
 .end method

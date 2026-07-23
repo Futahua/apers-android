@@ -4,7 +4,7 @@
 
 
 # static fields
-.field private static final ASSET_REV:Ljava/lang/String; = "1"
+.field private static final ASSET_REV:Ljava/lang/String; = "13"
 
 .field public static final BASE_URL:Ljava/lang/String; = "http://127.0.0.1:8787/"
 
@@ -791,7 +791,7 @@
 
     move-result v0
 
-    const-string v3, "1"
+    const-string v3, "13"
 
     if-eqz v0, :cond_0
 
@@ -902,7 +902,7 @@
     invoke-virtual {p0}, Ljava/io/FileOutputStream;->close()V
 
     .line 91
-    const-string p0, "Webui assets seeded (rev 1)"
+    const-string p0, "Webui assets seeded (rev 13)"
 
     invoke-static {v4, p0}, Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I
 

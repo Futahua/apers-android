@@ -58,7 +58,8 @@ Build a minimal Kotlin/Java Activity (`ChatWebActivity`) in a normal Android pro
   foregrounded.
 - Compile → `d8`/dex → baksmali → copy generated smali into the apktool project.
 - Add `<activity>` to `AndroidManifest.xml`; route the launcher (or the Terminal tab) to it.
-- Keep the existing native/terminal screen behind a "Diagnostics" action (fallback).
+- Keep the existing native/terminal screen behind a permanent **Original app**
+  sidebar action (fallback); Android Back should not be the only route to it.
 - Loopback cleartext is ALREADY permitted (`res/xml/network_security_config.xml` allows
   127.0.0.1 + localhost) — no manifest security change needed.
 
@@ -74,3 +75,16 @@ with the existing keystore (same key → installs over current build).
 ## Fallback already shipped
 If the WebView route is abandoned, the current native Compose chat + Papers agent skin
 (committed) is a working, good-looking result on its own.
+
+## Remote Desktop destination — verified 2026-07-23
+
+The shipped WebView main composer now includes **This phone / Hermes · PC**.
+Desktop-target messages use the native encrypted mesh transport, while keeping
+the WebUI conversation mapped to one durable PC Hermes session. Live tests on
+the installed phone passed over both local Wi-Fi and mobile data plus Tailscale,
+and the same conversation resumed after restarting the Android app and the PC
+companion. The drawer reports live **checking / connected / unreachable** state
+from encrypted polling rather than merely showing whether pairing data exists.
+Hermes Desktop also reconciles external local-session writes every five seconds,
+so a phone-created conversation appears in its normal Sessions sidebar and can
+be opened there without restarting the desktop application.

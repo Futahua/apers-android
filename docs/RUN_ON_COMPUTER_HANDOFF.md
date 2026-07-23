@@ -1,4 +1,84 @@
-# "Run on Computer" — make it frictionless & automatic (implementation handoff)
+# "Run on Computer" — implementation and current transport
+
+## Current state (2026-07-23)
+
+The Papers companion is installed and auto-started. Its encrypted broker listens
+on both the current LAN address (`192.168.192.102:51379`) and the machine's
+Tailscale address (`100.69.79.67:51379`), and pairing records carry the remote
+address in `alts`. The Android mesh client performs last-good endpoint failover,
+so the same pairing works on local Wi-Fi or away from home when Tailscale is
+connected on the phone. While the phone is on the home network, the main chat
+refreshes the paired record from encrypted companion discovery every five
+minutes, so an older pairing learns the Tailscale alternate without reopening
+the legacy mesh screen.
+
+The WebView's main composer now has a **This phone / Hermes · PC** target. Computer
+messages use the native encrypted mesh client. The broker maps each WebUI
+conversation to one canonical Hermes `session_id`, records that mapping in
+`queue.db`, and invokes `hermes chat --quiet --query` with `--resume` on later
+turns. A live encrypted test confirmed the same session survived both an Android
+app restart and a PC companion restart.
+
+The Desktop destination now reports live health rather than treating a saved
+pairing as proof of connectivity: **PC checking…**, **PC connected**, or
+**PC unreachable** is driven by encrypted poll success/failure.
+
+Tapping **Desktop** opens a searchable bottom sheet of the real, unarchived
+top-level Hermes PC sessions. Selecting one binds the current phone conversation
+to its stable Desktop `session_id`, loads a bounded user/assistant transcript,
+and resumes that exact session on later sends. **New Desktop session** clears the
+binding explicitly. The sheet dismisses by tapping outside it or using Android
+Back. The active Desktop title is shown in the composer target.
+
+Hermes Desktop now reconciles its visible local-session list every five seconds.
+This covers sessions written by another local Hermes surface (including the
+phone companion and CLI), which do not emit on the Desktop renderer's own
+websocket. Phone-created conversations therefore appear in the Desktop sidebar
+without restarting Hermes and open through the normal stored-session route.
+
+Computer-chat replies carry a reserved encrypted inbox envelope. Android's
+periodic native mesh worker deliberately leaves those replies unnotified and
+unacknowledged so the main chat can render and acknowledge them, including after
+the app is closed and reopened. Ordinary native mesh-task results keep their
+existing notification behavior.
+
+Tailscale supplies reachability only. NaCl Box still authenticates and encrypts
+the application payload end-to-end. Tailscale may use its private DERP relay when
+a direct path is unavailable; no public Apers/Papers relay is deployed.
+
+## Verified acceptance run (2026-07-23)
+
+- **LAN, real main composer:** the installed Android app sent `REMOTE_TEST`.
+  The companion received it from `192.168.192.101`, Hermes returned
+  `REMOTE_TEST received successfully.`, and the phone rendered and acknowledged
+  the result.
+- **Persistence:** conversation `webui-414f073fab08` remained mapped to Hermes
+  session `20260723_223742_682fba`. After restarting both the app and companion,
+  asking for the previous token returned `REMOTE_TEST`; the session id did not
+  change. Legacy marker-prefixed sessions are given clean Desktop titles on
+  companion startup; new messages never add a transport marker to the prompt.
+- **Away from LAN:** Wi-Fi was disabled on the phone, leaving mobile data and
+  Tailscale (`100.124.102.127`). The same main-chat conversation sent
+  `Reply exactly CELLULAR_TAILSCALE_OK`; the companion received and acknowledged
+  it over `100.124.102.127`, and the phone displayed
+  `CELLULAR_TAILSCALE_OK`. Tailscale reported the route through `DERP(sin)`.
+- Wi-Fi was restored after the test, and the phone's Tailscale connection was
+  left active.
+- **Live Desktop reconciliation:** while Hermes Desktop remained open, an
+  external session `20260723_230254_e97305` was created. Its sidebar count
+  changed from 10 to 11 and the new row appeared without a restart, proving the
+  fix independently of initial application loading.
+- **Existing Desktop pickup:** the phone searched for and selected `Woohoo`
+  (`20260722_003409_b3eea8`), loaded 22 visible messages, then sent
+  `Reply_exactly_PHONE_PICKUP_OK`. The same PC session stored the new user turn
+  and `PHONE_PICKUP_OK` assistant reply. After an app refresh the phone restored
+  the `Woohoo` binding and transcript. Explicit UTF-8 subprocess decoding was
+  verified with `PHONE_PICKUP_UTF8_OK`.
+
+These tests prove remote execution and durable shared Hermes session state
+visible from both the phone UI and Hermes Desktop. They do not mirror the
+Desktop window itself to the phone; both surfaces open the same stored
+conversation through their native UI.
 
 ## Copy-paste pickup prompt
 
@@ -62,11 +142,12 @@ The phone already contains a complete client in
   companion must **advertise** this service. This is the key to "finds the PC by
   itself." TXT/records expose at least `host` and `port`; the phone also keeps a
   `peers.json` of known peers (fields: `deviceId`/`did`, `host`, `port`, `peerPk`,
-  `alts`, `sid`).
+  `alts`, `sid`). `alts` now carries the computer's private Tailscale address.
 - **Crypto:** NaCl **box** (`boxEncrypt`/`boxDecrypt` in `HandoffCrypto`) — Curve25519
   keypairs, `generateIdentity`, `getPublicKey`/`getSecretKey`. The app bundles
   `libsodium.so` for exactly this. Companion pairs by exchanging public keys once
-  (`pair-once`), then all payloads are NaCl-box encrypted. **No cloud, LAN only.**
+  (`pair-once`), then all payloads are NaCl-box encrypted. LAN and Tailscale use
+  the same encrypted protocol and device identity.
 - **Pairing QR schema:** `QR_SCHEMA` / `HANDOFF_QR_SCHEMA`, version **v2**, must carry a
   session id (`sid`) — the phone rejects "handoff QR (v2) missing sid" and
   "unsupported QR schema:". QR/pairing-code content is JSON with peer id + public key +
@@ -124,7 +205,8 @@ Choose the smallest approach that yields the zero-friction outcome. A sensible s
 
 ## Guardrails
 
-- LAN-only, no cloud. Never transmit `auth.json`/`.env`; handoff bundles read only
+- No public relay. LAN and private Tailscale endpoints are allowed. Never
+  transmit `auth.json`/`.env`; handoff bundles read only
   `state.db` + `memories/` (already enforced in `handoff_core.py`).
 - One Hermes. Do not start a second Hermes backend; reuse Papers' `127.0.0.1:9119`.
 - Preserve creator data and any dirty work in all three checkouts.

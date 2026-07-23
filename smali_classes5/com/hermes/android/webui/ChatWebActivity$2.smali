@@ -30,7 +30,7 @@
         }
     .end annotation
 
-    .line 123
+    .line 136
     iput-object p1, p0, Lcom/hermes/android/webui/ChatWebActivity$2;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
 
     invoke-direct {p0}, Landroid/webkit/WebChromeClient;-><init>()V
@@ -55,7 +55,7 @@
         }
     .end annotation
 
-    .line 127
+    .line 140
     iget-object p1, p0, Lcom/hermes/android/webui/ChatWebActivity$2;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
 
     invoke-static {p1}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$fgetpendingFileChooser(Lcom/hermes/android/webui/ChatWebActivity;)Landroid/webkit/ValueCallback;
@@ -66,7 +66,7 @@
 
     if-eqz p1, :cond_0
 
-    .line 128
+    .line 141
     iget-object p1, p0, Lcom/hermes/android/webui/ChatWebActivity$2;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
 
     invoke-static {p1}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$fgetpendingFileChooser(Lcom/hermes/android/webui/ChatWebActivity;)Landroid/webkit/ValueCallback;
@@ -75,19 +75,19 @@
 
     invoke-interface {p1, v0}, Landroid/webkit/ValueCallback;->onReceiveValue(Ljava/lang/Object;)V
 
-    .line 130
+    .line 143
     :cond_0
     iget-object p1, p0, Lcom/hermes/android/webui/ChatWebActivity$2;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
 
     invoke-static {p1, p2}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$fputpendingFileChooser(Lcom/hermes/android/webui/ChatWebActivity;Landroid/webkit/ValueCallback;)V
 
-    .line 132
+    .line 145
     :try_start_0
     invoke-virtual {p3}, Landroid/webkit/WebChromeClient$FileChooserParams;->createIntent()Landroid/content/Intent;
 
     move-result-object p1
 
-    .line 133
+    .line 146
     iget-object p2, p0, Lcom/hermes/android/webui/ChatWebActivity$2;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
 
     const/16 p3, 0x1267
@@ -100,7 +100,7 @@
 
     return p1
 
-    .line 136
+    .line 149
     :catch_0
     iget-object p1, p0, Lcom/hermes/android/webui/ChatWebActivity$2;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
 
