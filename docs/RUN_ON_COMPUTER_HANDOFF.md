@@ -42,6 +42,18 @@ unacknowledged so the main chat can render and acknowledge them, including after
 the app is closed and reopened. Ordinary native mesh-task results keep their
 existing notification behavior.
 
+The same envelope now carries transient `__APERS_PROGRESS_V1__` events while a
+turn is active. The main chat acknowledges progress separately, keeps the task
+pending, and shows a compact Hermes-style activity card above the composer with
+elapsed time and recent tool actions. The final result removes the card and is
+stored in the shared conversation normally.
+
+The companion routes only short, clearly conversational follow-ups through a
+no-tool fast path. Action requests, current-information questions, URLs, paths,
+and substantial prompts keep the complete Hermes toolset. This avoids
+unrequested diagnostics for casual questions while preserving remote agent
+capabilities.
+
 Tailscale supplies reachability only. NaCl Box still authenticates and encrypts
 the application payload end-to-end. Tailscale may use its private DERP relay when
 a direct path is unavailable; no public Apers/Papers relay is deployed.
@@ -74,6 +86,14 @@ a direct path is unavailable; no public Apers/Papers relay is deployed.
   and `PHONE_PICKUP_OK` assistant reply. After an app refresh the phone restored
   the `Woohoo` binding and transcript. Explicit UTF-8 subprocess decoding was
   verified with `PHONE_PICKUP_UTF8_OK`.
+- **Fast conversational route:** repeating `whyd you take 30 sec to reply` in
+  that same large `Woohoo` session completed in 9.9 seconds with no tool calls,
+  versus 44.7 seconds and four unnecessary file searches before routing.
+- **Visible actionable work:** `Search the computer for
+  definitely-not-here-apers-ui-test.txt and reply TOOL_UI_OK` retained the full
+  toolset. The phone displayed the live elapsed card and both `Searching files`
+  steps, then removed it when `TOOL_UI_OK` arrived. The final and tool messages
+  were stored under the same Desktop session id.
 
 These tests prove remote execution and durable shared Hermes session state
 visible from both the phone UI and Hermes Desktop. They do not mirror the

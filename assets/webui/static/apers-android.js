@@ -6,6 +6,7 @@
   var PENDING_KEY = 'apers-computer-pending-v1';
   var BINDINGS_KEY = 'apers-computer-bindings-v1';
   var RESULT_PREFIX = '__APERS_CHAT_RESULT_V1__:';
+  var PROGRESS_PREFIX = '__APERS_PROGRESS_V1__\n';
   var CONTROL_LIST_ID = '__desktop_sessions__';
   var CONTROL_BIND_ID = '__desktop_bind__';
   var CONTROL_NEW_ID = '__desktop_new__';
@@ -85,6 +86,115 @@
     if (typeof setComposerStatus === 'function') setComposerStatus(status || '');
     var button = document.getElementById('apersComputerTarget');
     if (button) button.classList.toggle('is-running', !!busy);
+    renderRemoteActivity();
+  }
+
+  function createRemoteActivity() {
+    var existing = document.getElementById('apersRemoteActivity');
+    if (existing) return existing;
+    var composer = document.getElementById('composerBox');
+    if (!composer || !composer.parentNode) return null;
+    var activity = document.createElement('div');
+    activity.id = 'apersRemoteActivity';
+    activity.className = 'apers-remote-activity';
+    activity.setAttribute('role', 'status');
+    activity.setAttribute('aria-live', 'polite');
+    activity.hidden = true;
+    activity.innerHTML =
+      '<div class="apers-remote-activity-summary">' +
+        '<span class="apers-remote-activity-dot" aria-hidden="true"></span>' +
+        '<span class="apers-remote-activity-label">Hermes is thinking</span>' +
+        '<span class="apers-remote-activity-time"></span>' +
+      '</div>' +
+      '<div class="apers-remote-activity-steps"></div>';
+    composer.parentNode.insertBefore(activity, composer);
+    return activity;
+  }
+
+  function activePendingOwner() {
+    var sessionId = activeSessionId();
+    var ids = Object.keys(pending);
+    for (var i = ids.length - 1; i >= 0; i--) {
+      var owner = pending[ids[i]];
+      if (owner && !owner.kind && owner.sessionId === sessionId) return owner;
+    }
+    return null;
+  }
+
+  function renderRemoteActivity() {
+    var card = createRemoteActivity();
+    if (!card) return;
+    var owner = target === 'computer' ? activePendingOwner() : null;
+    card.hidden = !owner;
+    if (!owner) return;
+    var activity = owner.activity || {};
+    var label = card.querySelector('.apers-remote-activity-label');
+    var elapsed = card.querySelector('.apers-remote-activity-time');
+    var steps = card.querySelector('.apers-remote-activity-steps');
+    label.textContent = activity.label || 'Hermes is thinking';
+    var started = Number(activity.started || owner.created || Date.now());
+    elapsed.textContent = Math.max(0, Math.round((Date.now() - started) / 1000)) + 's';
+    steps.textContent = '';
+    (Array.isArray(activity.steps) ? activity.steps.slice(-3) : []).forEach(function (step) {
+      var row = document.createElement('div');
+      row.className = 'apers-remote-activity-step ' +
+        (step.status === 'done' ? 'is-done' : 'is-running');
+      var mark = document.createElement('span');
+      mark.className = 'apers-remote-activity-step-mark';
+      mark.textContent = step.status === 'done' ? '✓' : '•';
+      var copy = document.createElement('span');
+      copy.className = 'apers-remote-activity-step-copy';
+      copy.textContent = step.label || 'Using a tool';
+      if (step.detail) {
+        var detail = document.createElement('small');
+        detail.textContent = step.detail;
+        copy.appendChild(detail);
+      }
+      row.appendChild(mark);
+      row.appendChild(copy);
+      steps.appendChild(row);
+    });
+    steps.hidden = !steps.childNodes.length;
+  }
+
+  function applyRemoteProgress(owner, event) {
+    var activity = owner.activity || {
+      started: owner.created || Date.now(),
+      label: 'Hermes is thinking',
+      steps: []
+    };
+    activity.label = String(event.label || 'Hermes is thinking');
+    if (!Array.isArray(activity.steps)) activity.steps = [];
+    if (event.phase === 'tool_started') {
+      activity.steps.push({
+        callId: String(event.call_id || Date.now()),
+        label: activity.label,
+        detail: String(event.detail || ''),
+        status: 'running'
+      });
+    } else if (event.phase === 'tool_completed') {
+      var callId = String(event.call_id || '');
+      var matched = false;
+      for (var i = activity.steps.length - 1; i >= 0; i--) {
+        if ((callId && activity.steps[i].callId === callId) ||
+            (!callId && activity.steps[i].status === 'running')) {
+          activity.steps[i].status = 'done';
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        activity.steps.push({
+          callId: callId,
+          label: activity.label,
+          detail: '',
+          status: 'done'
+        });
+      }
+    }
+    owner.activity = activity;
+    writeJson(PENDING_KEY, pending);
+    renderRemoteActivity();
   }
 
   function renderThread(sessionId) {
@@ -534,7 +644,12 @@
     pending[String(event.id)] = {
       sessionId: threadSessionId,
       conversationId: thread.conversationId,
-      created: Date.now()
+      created: Date.now(),
+      activity: {
+        started: Date.now(),
+        label: 'Hermes is thinking',
+        steps: []
+      }
     };
     writeJson(PENDING_KEY, pending);
     saveThread(threadSessionId, thread);
@@ -557,15 +672,24 @@
         accepted.push(String(result.id));
         return;
       }
+      var unwrapped = unwrapComputerResult(result.text || '');
+      if (unwrapped.indexOf(PROGRESS_PREFIX) === 0) {
+        try {
+          applyRemoteProgress(owner, JSON.parse(
+            unwrapped.slice(PROGRESS_PREFIX.length) || '{}'));
+        } catch (_) {
+          // A malformed progress update must not consume the actual task.
+        }
+        accepted.push(String(result.id));
+        return;
+      }
       var thread = readThread(owner.sessionId);
       thread.messages.forEach(function (message) {
         if (message._remoteRef === ref) message._pending = false;
       });
       thread.messages.push({
         role: 'assistant',
-        content: unwrapComputerResult(
-          result.text || (result.ok ? '(no output)' : 'Computer task failed.')
-        ),
+        content: unwrapped || (result.ok ? '(no output)' : 'Computer task failed.'),
         _ts: Number(result.created) || Date.now() / 1000,
         _computer: true,
         _error: !result.ok
@@ -582,6 +706,7 @@
         host.ackComputerResults(JSON.stringify(accepted));
       }
     }
+    renderRemoteActivity();
   }
 
   function handleControlResult(owner, result) {
@@ -735,11 +860,13 @@
     revealAndroidActions();
     installDrawerBackdrop();
     createDesktopPicker();
+    createRemoteActivity();
     window.addEventListener('popstate', function () {
       if (pickerOpen) closeDesktopSessions(true);
     });
     updateTargetUi();
     setInterval(function () {
+      renderRemoteActivity();
       var current = activeSessionId();
       if (target === 'computer' && current && current !== lastActiveSessionId) {
         lastActiveSessionId = current;
@@ -756,7 +883,7 @@
         bindDesktopSession(binding.id, true);
       }
       pollComputer();
-    }, 5000);
+    }, 1500);
     setTimeout(pollComputer, 400);
   }
 
