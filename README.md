@@ -15,16 +15,33 @@ split delivery, advertising, billing, and licensing removed/disabled.
 - ✅ **Installs and launches on-device** (verified: Samsung SM-N975F, Android 12 /
   API 31 / arm64-v8a), alongside the original `com.hermesagent.android`.
 - ✅ No Play Store split APKs required; arm64-v8a native libs merged into the base APK.
+- ✅ The primary launcher is the bundled Hermes WebUI in `ChatWebActivity`, served
+  on-device at `127.0.0.1:8787`; the native application remains available as
+  **Original**.
+- ✅ The unified sidebar manages phone projects and real Hermes PC sessions, including
+  encrypted remote continuation over LAN/Tailscale.
 
 See [`BUILD_REPORT.md`](BUILD_REPORT.md) for the full audit, the exact changes made,
 and the on-device test results.
+
+Current engineering and product documentation:
+
+- [`docs/PARALLEL_HANDOFF.md`](docs/PARALLEL_HANDOFF.md) — current handoff and active
+  reliability defect (historical filename retained for old links);
+- [`docs/WEBUI_CHAT_HANDOFF.md`](docs/WEBUI_CHAT_HANDOFF.md) — shipped WebUI
+  architecture and maintenance;
+- [`docs/RUN_ON_COMPUTER_HANDOFF.md`](docs/RUN_ON_COMPUTER_HANDOFF.md) — Desktop
+  transport and session ownership;
+- [`docs/CHAT_UI_SPEC.md`](docs/CHAT_UI_SPEC.md) — approved phone UI;
+- [`docs/UI_REDESIGN_PLAN.md`](docs/UI_REDESIGN_PLAN.md) — implementation status and
+  remaining design work.
 
 ## What's here
 
 ```
 AndroidManifest.xml     decoded manifest (split/ads/billing/license stripped)
 apktool.yml             apktool project metadata (minSdk 26, targetSdk 35, v3.0.0)
-smali*/                 decoded Dalvik bytecode (4 dex trees)
+smali*/                 decoded Dalvik bytecode (including the WebUI host/bridge)
 res/                    resources (incl. custom launcher icons)
 assets/                 app assets (python/termux bootstrap zips, wheels, handoff, ...)
 lib/arm64-v8a/          native libraries (libtermux, libjnidispatch, libsodium, ...)

@@ -1,90 +1,171 @@
-# Web-UI chat surface — implementation handoff (Phase 2)
+# WebUI chat architecture and maintenance handoff
 
-Goal: replace the app's chat surface with a **WebView showing `nesquena/hermes-webui`**,
-served locally by the on-device Hermes agent. Slick + maintainable: consumes the agent's
-structured stream (via `AIAgent(quiet_mode=True)`), no terminal scraping. Stays one
-self-contained app (tap icon → chat); the agent still runs on-device.
+Last verified against `main`: 2026-07-24.
 
-## Phase 1 — PROVEN on-device (do not re-litigate)
+The WebUI chat surface is implemented and shipped. This is a maintenance document,
+not a future-phase plan.
 
-Verified on the real device (Samsung SM-N975F, Android 12), agent `apers.terminal.agent.ap`:
+## Runtime architecture
 
-- ❌ **Bundled `hermes web` (`:9119`) is a DEAD END.** Returns
-  `{"error":"Frontend not built. Run: cd web && npm run build"}`. The React frontend is
-  NOT in `assets/hermes-agent-source.zip` and cannot be built on-device (no Node).
-- ✅ **`nesquena/hermes-webui` WORKS on-device.** Vanilla JS (no build step), Python
-  `http.server`, only extra dep is PyYAML (present). Runs the agent in-process.
-- ✅ On-device checks passed: `python3 -c "import yaml, run_agent; print(hasattr(run_agent.AIAgent,'run_conversation'))"` → `OK True`.
-- ✅ Launched successfully and rendered a real chat UI in the phone browser at
-  `http://127.0.0.1:8787` — session list, composer, **file upload** (saved to
-  `~/.hermes/webui/attachments/`), **structured error/disclosure cards**, model switch.
-- Known: webui stores its own sessions in `~/.hermes/webui/sessions/*.json`, SEPARATE
-  from the agent's `state.db` (so it won't show the terminal's history — acceptable).
+The launcher activity is
+`com.hermes.android.webui.ChatWebActivity`, registered in `AndroidManifest.xml`.
+It creates the Android WebView, installs the native JavaScript bridge, handles the
+startup screen and Back behavior, and loads:
 
-### Exact working launch (what proved it)
-Files staged, then run in the app's terminal (Termux/Python env):
-```sh
-mkdir -p ~/hermes-webui
-tar xzf /sdcard/hermes-webui.tgz -C ~/hermes-webui   # server.py + api/ + static/ (~3.6 MB)
-cd ~/hermes-webui
-HERMES_WEBUI_AGENT_DIR="$HOME/.hermes-android/hermes-agent" \
-HERMES_HOME="$HOME/.hermes" \
-HERMES_WEBUI_PORT=8787 \
-python3 server.py
-# → "host:port : 127.0.0.1:8787"; open http://127.0.0.1:8787
+```text
+http://127.0.0.1:8787/
 ```
-- Agent lives at `~/.hermes-android/hermes-agent` (set `HERMES_WEBUI_AGENT_DIR` to it).
-- Source: `github.com/nesquena/hermes-webui` (MIT). Lean bundle = `server.py`, `api/`, `static/`.
 
-## Phase 2 — the build (hand to a from-source coding agent)
+`com.hermes.android.webui.WebUiServer` copies the bundled tree from
+`assets/webui/` into the app runtime, launches the Python server, and waits for the
+loopback endpoint. The bundle contains:
 
-Per the reviewer's guidance: **do NOT hand-author the WebView in smali.** Build a tiny
-normal Android donor project, compile it, transplant generated smali + manifest.
+```text
+assets/webui/server.py
+assets/webui/api/
+assets/webui/static/
+```
 
-### A. Bundle hermes-webui into the APK
-- Add the lean webui tree under `assets/webui/` (server.py, api/, static/).
-- On bootstrap (extend `BootstrapManager.installPatches()` or `monkey_patch.py`), copy
-  `assets/webui/` → `~/hermes-webui/` if absent (mirrors how patches are seeded).
+The server runs the phone's Hermes agent in-process and exposes the full WebUI API.
+Phone WebUI sessions live in the on-device WebUI session store. They are distinct
+from Hermes PC sessions shown in Desktop mode.
 
-### B. Launch the server
-- Reuse the app's existing Termux exec service (same path that runs the `hermes`
-  wrapper / `TerminalSessionManager`) to run `python3 ~/hermes-webui/server.py` with the
-  env above, as a background process. Health-poll `http://127.0.0.1:8787/` until ready.
+The original Compose/terminal app remains available through the **Original**
+destination. It must stay reachable without relying solely on Android Back.
 
-### C. Donor Android project → WebView Activity
-Build a minimal Kotlin/Java Activity (`ChatWebActivity`) in a normal Android project:
-- WebView with `javaScriptEnabled`, `domStorageEnabled`, loads `http://127.0.0.1:8787`.
-- Loading/splash while health-polling; back-button handling; keep server alive while
-  foregrounded.
-- Compile → `d8`/dex → baksmali → copy generated smali into the apktool project.
-- Add `<activity>` to `AndroidManifest.xml`; route the launcher (or the Terminal tab) to it.
-- Keep the existing native/terminal screen behind a permanent **Original app**
-  sidebar action (fallback); Android Back should not be the only route to it.
-- Loopback cleartext is ALREADY permitted (`res/xml/network_security_config.xml` allows
-  127.0.0.1 + localhost) — no manifest security change needed.
+## Custom integration layer
 
-### D. Papers polish (optional, easy)
-Restyle `static/style.css` to the Papers palette (canvas `#0a0a18`, ink `#f3f0e8`,
-accent `#cf806d`) so it matches the rest of the app. Pure CSS, no smali.
+The base WebUI remains largely upstream-shaped. Android-specific behavior belongs in:
 
-## Toolchain (on the build machine)
-JDK 21 (Android Studio JBR), apktool 2.11.1, Android build-tools 35.0.0 (`d8`, `aapt2`,
-`zipalign`, `apksigner`), platform-tools (`adb`). Build via `scripts/build-apk.sh`; sign
-with the existing keystore (same key → installs over current build).
+- `assets/webui/static/apers-android.js`
+- `assets/webui/static/apers-android.css`
 
-## Fallback already shipped
-If the WebView route is abandoned, the current native Compose chat + Papers agent skin
-(committed) is a working, good-looking result on its own.
+`assets/webui/static/index.html` loads those files last. Prefer targeted integration
+over broad edits to the large upstream files unless the behavior is genuinely shared.
 
-## Remote Desktop destination — verified 2026-07-23
+The Android layer currently owns:
 
-The shipped WebView main composer now includes **This phone / Hermes · PC**.
-Desktop-target messages use the native encrypted mesh transport, while keeping
-the WebUI conversation mapped to one durable PC Hermes session. Live tests on
-the installed phone passed over both local Wi-Fi and mobile data plus Tailscale,
-and the same conversation resumed after restarting the Android app and the PC
-companion. The drawer reports live **checking / connected / unreachable** state
-from encrypted polling rather than merely showing whether pairing data exists.
-Hermes Desktop also reconciles external local-session writes every five seconds,
-so a phone-created conversation appears in its normal Sessions sidebar and can
-be opened there without restarting the desktop application.
+- the Papers warm-light treatment and matching status/navigation bars;
+- Desktop and Original sidebar destinations;
+- the unified phone/Desktop session sidebar;
+- phone project and Desktop workspace grouping;
+- project collapse, reorder, creation, rename, color selection, and deletion;
+- session long-press actions and invisible reorder grips;
+- phone-to-Desktop continuation;
+- Desktop transcript rendering and persistent worklogs;
+- removal of redundant assistant identity labels and mode controls;
+- the Hermes Agent empty-state wordmark.
+
+Base WebUI behavior still comes from files such as:
+
+- `sessions.js` — session creation, loading, projects, and session actions;
+- `workspace.js` — `api()` and its default request timeout;
+- `ui.js` — dialogs, messages, composer, and shared UI utilities;
+- `panels.js` — settings and auxiliary panels;
+- `style.css` — base styles.
+
+## Native bridge
+
+`ChatWebActivity$AndroidBridge.smali` exposes the computer-transport methods consumed
+by `apers-android.js`, including send, poll, and acknowledgement operations. The
+bridge does not replace the phone server API. These are separate paths:
+
+```text
+Phone chat:
+WebView → loopback WebUI API → on-device Hermes
+
+Desktop chat:
+WebView → AndroidBridge → encrypted companion → Hermes PC session
+```
+
+Do not send Desktop work through the phone API or create an independent PC Hermes
+backend.
+
+## Asset revisioning
+
+WebUI assets are seeded into persistent application storage. An APK reinstall does not
+guarantee that unchanged revision metadata will overwrite the previous seeded copy.
+
+Whenever any shipped file under `assets/webui/` changes, bump:
+
+1. both `apers=` query values in `assets/webui/static/index.html`;
+2. the seed revision string in
+   `smali_classes5/com/hermes/android/webui/WebUiServer.smali`;
+3. the matching `Webui assets seeded (rev N)` log text.
+
+Keep all three values identical. The current revision must be discovered from source
+before editing rather than copied from this document.
+
+## UI and interaction constraints
+
+- Preserve all base WebUI functions while applying the Papers/Hermes presentation.
+- The Desktop destination is a toggle, not a one-way switch.
+- Desktop sessions appear in the same sidebar, not a separate popup.
+- Original remains a bottom sidebar destination.
+- Closing the sidebar uses Android Back or the blank area outside it; do not add a
+  conflicting close button over the chat.
+- The closed drawer must not leave a shadow strip over the main conversation.
+- Projects are not date buckets.
+- Sessions are slightly indented below project headings.
+- Project colors affect both the dot and readable heading text.
+- Do not add folder icons merely to communicate hierarchy.
+- Long-press opens management actions; the invisible right-edge zone is reserved for
+  drag reordering.
+- Assistant replies do not repeat the Hermes avatar/name on every message.
+- Remote worklogs should match native phone worklogs and persist after reload.
+
+See [`CHAT_UI_SPEC.md`](CHAT_UI_SPEC.md) for the complete approved behavior.
+
+## Current defect to fix
+
+Selecting an uncached Desktop session can remain indefinitely at:
+
+```text
+Preparing this Desktop conversation…
+```
+
+The relevant browser flow is in `apers-android.js`:
+
+```text
+openDesktopSession
+  → bindDesktopSession
+    → ensureDesktopShell
+      → newSession(undefined, {worktree: false})
+        → POST /api/session/new
+```
+
+`bindDesktopSession()` currently lacks complete failure cleanup around shell creation.
+The generic API timeout is 30 seconds, but the visible preparing state is not cleared
+after rejection. The later native control request lifecycle also needs an explicit
+expiry. The acceptance criteria are maintained in
+[`PARALLEL_HANDOFF.md`](PARALLEL_HANDOFF.md).
+
+## Build and verification
+
+Run at minimum:
+
+```powershell
+node --check assets/webui/static/apers-android.js
+git diff --check
+& 'C:\Program Files\Git\bin\bash.exe' scripts/build-apk.sh
+```
+
+Install the signed APK on the real SM-N975F and inspect screenshots. Browser-only
+testing is insufficient because Android WebView sizing, system bars, keyboard resize,
+Back behavior, asset seeding, and the native bridge are part of the product.
+
+Do not call a WebUI change complete until:
+
+- the updated asset revision actually appears on-device;
+- phone chat still sends and reloads;
+- sidebar open/close behavior is intact;
+- project/session gestures work without opening the wrong action;
+- Desktop mode still loads its catalogue;
+- Original still opens and can return to the WebUI.
+
+## Historical note
+
+The original proof used the lean `nesquena/hermes-webui` server and led to the current
+bundle. Earlier instructions to “implement Phase 2,” create `ChatWebActivity`, or
+decide whether to use a WebView are complete historical steps and must not be treated
+as open work.

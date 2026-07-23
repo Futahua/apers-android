@@ -1,141 +1,224 @@
-# Parallel handoff — Run on Computer + Web-UI chat surface
+# Current engineering handoff
 
-Orchestrator prompt for running both open handoffs concurrently. Paste this whole
-document to a single orchestrating agent (or use it to brief two agents plus a human
-merge step). The two individual briefs (`docs/RUN_ON_COMPUTER_HANDOFF.md` and
-`docs/WEBUI_CHAT_HANDOFF.md`) remain the authoritative source for each stream; this
-file is the coordination layer on top.
+Last verified against `main`: 2026-07-24.
 
----
+This file keeps its historical name so old links continue to work. It is no longer a
+plan for two parallel feature branches. The WebUI chat surface and Run on Computer
+transport have shipped and are integrated on `main`.
 
-## Orchestrator prompt
+Use this document to orient a new agent before changing the Android app. For details,
+follow the focused documents:
 
-You are the orchestrator for two parallel workstreams on the Android app in repo
-**`github.com/Futahua/apers-android`** (local checkout:
-`D:\Letters\MatTroiSeConMoc\apers-android`). This is an **apktool-decoded project** —
-edits are **smali** (readable Java in `reference/decompiled-java/` is reference only,
-not buildable). Rebuild with `bash scripts/build-apk.sh` (JDK 21 / apktool 2.11.1 /
-build-tools 35.0.0 incl. `d8`; sign with the existing keystore so it installs over the
-current build). Verify on-device via ADB. The creator is not a coder: acceptance is
-demonstrated behavior + screenshots, never diffs. Keep the app fully functional at
-every step.
+- [`WEBUI_CHAT_HANDOFF.md`](WEBUI_CHAT_HANDOFF.md) — WebView/server architecture,
+  Android asset revisioning, and WebUI maintenance.
+- [`RUN_ON_COMPUTER_HANDOFF.md`](RUN_ON_COMPUTER_HANDOFF.md) — Desktop-session
+  transport, Android bridge, companion behavior, and failure handling.
+- [`CHAT_UI_SPEC.md`](CHAT_UI_SPEC.md) — current approved phone interaction and visual
+  rules.
+- [`UI_REDESIGN_PLAN.md`](UI_REDESIGN_PLAN.md) — implemented UI state and remaining
+  design work.
 
-Run the two workstreams **in parallel** (separate git worktrees/branches, ideally two
-subagents), then integrate. Each has an authoritative brief in `docs/` — read it
-completely before touching code.
+## Repository and product
 
-**Stream A — "Run on Computer" (branch `feat/run-on-computer`).** Brief:
-`docs/RUN_ON_COMPUTER_HANDOFF.md` (+
-`reference/decompiled-java/app/src/main/java/com/hermes/android/handoff/*.java`,
-`HERMES.md`). Goal: phone auto-discovers the PC on the LAN and connects with ≤1 tap —
-no terminal, no typing a pairing code. Conform to the verified protocol in the brief
-(mDNS `_hermes-handoff._tcp.`, NaCl-box, QR v2). Fix the misleading hardcoded
-`python -m handoff.mesh_broker` string (real companion:
-`github.com/HenWorks/Hermes-agent-android-PC-companion-app` — verify against the smali
-first). **File scope:** `smali*/com/hermes/android/handoff/**`,
-`smali*/…/MainActivityKt$MeshScreen*`, `res/values/strings.xml` (mesh_* only),
-`assets/handoff/**`.
+- Repository: `github.com/Futahua/apers-android`
+- Local checkout: `D:\Letters\MatTroiSeConMoc\apers-android`
+- Package: `apers.terminal.agent.ap`
+- Target device: Samsung SM-N975F, Android 12, arm64-v8a
+- Project type: apktool-decoded APK, not Gradle
+- Primary branch: `main`
+- Build output: `dist/apers-signed.apk`
 
-**Stream B — web-UI chat surface (branch `feat/webui-chat`).** Brief:
-`docs/WEBUI_CHAT_HANDOFF.md`. Phase 1 is **already proven on-device — do not
-re-litigate**: `nesquena/hermes-webui` (vanilla JS, no build, PyYAML-only, in-process
-agent via `AIAgent(quiet_mode=True)`) served a working chat at `127.0.0.1:8787`; the
-bundled `hermes web` (:9119) is a dead end. Implement Phase 2: bundle the lean webui
-tree into `assets/webui/`; seed it to `~/hermes-webui/` on bootstrap and launch
-`python3 server.py` (env per brief) via the app's existing Termux exec service,
-health-poll `:8787`; build `ChatWebActivity` as a **normal Kotlin/Java donor Android
-project**, compile, and transplant generated smali + manifest entry — **do NOT
-hand-author the WebView in smali**; route the launcher/Terminal tab to it, keep the
-native screen behind a Diagnostics fallback; optionally restyle `static/style.css` to
-Papers (`#0a0a18`/`#f3f0e8`/`#cf806d`). Loopback cleartext is already permitted — no
-security-config change. **File scope:** new `assets/webui/**`, new `ChatWebActivity`
-smali+resources, bootstrap-seeding smali, and `AndroidManifest.xml` (`<activity>` +
-launcher route).
+Always inspect `git status`, `git log -1`, and the current Android asset revision
+before editing. Do not assume the commit or revision recorded in a handoff is still
+HEAD. Preserve unrelated dirty files; `artifacts/development/` is intentionally
+untracked and must not be committed.
 
-**Coordination rules (your job as orchestrator):**
-- The streams are disjoint **except `AndroidManifest.xml`** (both may add components)
-  and `scripts/`/build config. Treat the manifest as the shared resource: have each
-  stream make only **additive** manifest edits and record them; you perform the final
-  merge.
-- **Integration order:** land Stream B's manifest/launcher change first, then rebase
-  Stream A onto it, so A's mesh `<service>`/`<receiver>` additions apply on top cleanly.
-  Resolve the manifest by union, not overwrite.
-- Do a **combined build after merge** and verify on-device that BOTH work:
-  Run-on-Computer connects with one tap, AND the web-UI chat opens as the chat surface
-  — in the same APK, no regressions to onboarding/storage/existing features.
-- If the two features conflict on the launcher/Terminal-tab routing (both may want to
-  be the entry), reconcile so the web-UI chat is the chat surface and "Run on Computer"
-  remains reachable from its existing entry point.
-- Report progress per stream; deliver one merged signed APK plus screenshots
-  demonstrating each feature. If either stream hits a hard blocker, land the other
-  independently rather than blocking both.
+## Shipped architecture
 
----
+### Phone chat
 
-## Individual prompts (if running two separate agents instead of one orchestrator)
+`com.hermes.android.webui.ChatWebActivity` is the launcher activity. It hosts a
+WebView pointed at `http://127.0.0.1:8787/`.
 
-### Prompt A — Run on Computer (mesh)
+`com.hermes.android.webui.WebUiServer` seeds `assets/webui/` to the app runtime and
+starts the bundled Python server. The server is the lean Hermes WebUI in
+`assets/webui/server.py`, `assets/webui/api/`, and `assets/webui/static/`.
 
-You are picking up the **"Run on Computer"** feature for the Android app in repo
-`github.com/Futahua/apers-android` (local checkout:
-`D:\Letters\MatTroiSeConMoc\apers-android`). Read `docs/RUN_ON_COMPUTER_HANDOFF.md`
-completely first — it is the authoritative brief and contains the verified protocol
-(mDNS `_hermes-handoff._tcp.`, NaCl-box pairing, QR v2 schema), the real environment
-(Papers/Hermes at the paths listed), and the smallest-path plan. Also read
-`reference/decompiled-java/app/src/main/java/com/hermes/android/handoff/*.java`
-(readable source of the exact client protocol) and `HERMES.md`.
+The old Compose/terminal application remains available through the sidebar's
+**Original** destination. It is a fallback and capability surface, not the primary
+chat UI. Do not route users to it only through Android Back.
 
-Goal: make "Run on Computer" frictionless and automatic — the phone auto-discovers the
-PC on the LAN and connects with at most one tap; no terminal, no manual pairing-code
-typing. It must stay a self-contained flow. Fix the misleading hardcoded
-`python -m handoff.mesh_broker` instruction (that module doesn't exist; the real
-companion is `github.com/HenWorks/Hermes-agent-android-PC-companion-app` — verify it
-against the smali protocol before relying on it).
+### Phone/PC conversation model
 
-**Constraints:** This is an apktool-decoded project — edit **smali** and rebuild with
-`bash scripts/build-apk.sh` (JDK 21 + apktool 2.11.1 + build-tools 35.0.0; sign with
-the existing keystore so it installs over the current build). Keep the app fully
-functional. **Work on branch `feat/run-on-computer`.** Your file scope is
-`smali*/com/hermes/android/handoff/**`, `smali*/…/MainActivityKt$MeshScreen*`,
-`res/values/strings.xml` (mesh_* strings), `assets/handoff/**`. A parallel task is
-editing the WebView chat surface — avoid unrelated edits to `MainActivityKt`'s
-chat/terminal code and to `AndroidManifest.xml` beyond any `<service>`/`<receiver>` you
-must add (note additions in your PR so the manifest merges cleanly). Verify on-device
-via ADB. Acceptance is demonstrated behavior + screenshots, not diffs (the creator is
-not a coder).
+The sidebar's **Desktop** destination is a toggle between:
 
-### Prompt B — Web-UI chat surface
+- phone WebUI sessions served by the on-device backend; and
+- real Hermes PC sessions supplied by the encrypted companion.
 
-You are picking up the **web-UI chat surface** for the Android app in repo
-`github.com/Futahua/apers-android` (local checkout:
-`D:\Letters\MatTroiSeConMoc\apers-android`). Read `docs/WEBUI_CHAT_HANDOFF.md`
-completely first — it is the authoritative brief. **Phase 1 is already proven
-on-device** (do not re-litigate): `nesquena/hermes-webui` (vanilla JS, no build,
-PyYAML-only, runs the on-device agent in-process via `AIAgent(quiet_mode=True)`)
-served a working chat at `http://127.0.0.1:8787` — sessions, composer, file upload,
-structured cards, model switch. The bundled `hermes web` (:9119) is a confirmed dead
-end (frontend not built, no Node on-device).
+Desktop sessions render in the same sidebar and main chat surface. A local hidden
+phone session acts as the owner/shell for a selected PC conversation. The binding is
+durable, while the transcript and canonical Hermes `session_id` remain on the PC.
 
-Goal: make that web UI the app's chat surface — a slick, maintainable, self-contained
-result (tap icon → clean chat; agent still runs on-device). Implement Phase 2 exactly
-as the brief specifies: (1) bundle the lean hermes-webui tree into `assets/webui/`;
-(2) seed it into `~/hermes-webui/` on bootstrap and launch `python3 server.py` with the
-env in the brief via the app's existing Termux exec service, health-polling
-`127.0.0.1:8787`; (3) build a `ChatWebActivity` as a **normal Kotlin/Java donor Android
-project**, compile it, and transplant the generated smali + `<activity>` manifest entry
-into the apktool project — **do NOT hand-author the WebView in smali**; (4) route the
-launcher/Terminal tab to it, keep the existing native screen behind a Diagnostics
-fallback; (5) optional: restyle `static/style.css` to the Papers palette (canvas
-`#0a0a18`, ink `#f3f0e8`, accent `#cf806d`).
+The WebView calls the native `AndroidBridge` in
+`ChatWebActivity$AndroidBridge.smali`. The native bridge sends and polls encrypted
+computer messages. `assets/webui/static/apers-android.js` owns the browser-side
+session catalogue, binding map, pending requests, transcript mapping, worklog
+rendering, and Desktop/phone navigation.
 
-**Constraints:** apktool-decoded project; rebuild with `bash scripts/build-apk.sh`
-(JDK 21, apktool 2.11.1, build-tools 35.0.0 incl. `d8`; sign with the existing
-keystore). Loopback cleartext is already permitted in
-`res/xml/network_security_config.xml` — no security-config change needed. **Work on
-branch `feat/webui-chat`.** Your file scope is new `assets/webui/**`, the new
-`ChatWebActivity` smali + resources, bootstrap-seeding smali, and the `<activity>` +
-launcher/route entries in `AndroidManifest.xml`. A parallel task edits the
-mesh/handoff feature — don't touch `com/hermes/android/handoff/**` or `mesh_*`
-strings; when you edit `AndroidManifest.xml`, only add your `<activity>` and adjust
-the launcher intent-filter, and note it in your PR so it merges cleanly. Verify
-on-device via ADB; acceptance is demonstrated behavior + screenshots.
+The companion is reachable over LAN or the paired Tailscale alternate. Tailscale
+provides reachability; NaCl Box still protects the application payload. There is no
+public Apers relay.
+
+### Current phone UI
+
+The shipped WebUI uses the warm Papers light treatment and preserves the underlying
+Hermes WebUI capabilities. Current custom behavior includes:
+
+- Desktop and Original destinations at the bottom of the sidebar;
+- a phone/Desktop sidebar toggle rather than a separate session picker;
+- phone projects and Desktop workspaces in the same hierarchical list;
+- collapsible and reorderable projects, including Unassigned;
+- slightly indented conversations below project headings;
+- project creation, rename, color editing, destructive delete confirmation, and
+  invisible right-edge reorder grips;
+- conversation action menus and phone-to-Desktop continuation;
+- native-style persistent worklogs for remote Desktop turns;
+- no redundant Hermes avatar/name above every assistant response.
+
+Do not reintroduce the removed WebUI/CLI pills, redundant rail destinations, a
+composer mode button, folder icons, or a one-way Desktop switch.
+
+## Active defect: Desktop preparation can remain stuck
+
+Observed on the installed asset revision 32:
+
+1. Start in a normal phone conversation.
+2. Switch the sidebar to Desktop.
+3. Select a PC session that has no existing local shell.
+4. The sidebar displays **Preparing this Desktop conversation…** indefinitely.
+
+Expected preparation is usually 2–5 seconds. The generic WebUI request timeout is
+30 seconds, so the UI must never remain in that state beyond a bounded failure.
+
+Relevant flow in `assets/webui/static/apers-android.js`:
+
+- `openDesktopSession()`
+- `bindDesktopSession()`
+- `ensureDesktopShell()`
+- `dispatchControl()`
+- `onDispatch()`
+- `handleControlResult()`
+- `controlRequests` and `pending`
+
+`ensureDesktopShell()` awaits `newSession(undefined, {worktree: false})`.
+`newSession()` is defined in `assets/webui/static/sessions.js` and calls
+`api('/api/session/new')`. `api()` is defined in
+`assets/webui/static/workspace.js`.
+
+The immediate defect is that `bindDesktopSession()` sets the preparing state and
+awaits shell creation without a catch/finally path. A rejection or timeout leaves the
+old status visible. A complete fix must also audit accepted native control requests,
+which can otherwise remain pending without an expiry.
+
+Acceptance for the fix:
+
+- tapping once cannot dispatch duplicate bind operations;
+- shell creation either succeeds or produces a useful error within a bounded time;
+- successful preparation advances to **Loading conversation…** and opens the selected
+  PC transcript;
+- failure leaves the catalogue usable and offers a retry;
+- retry does not create duplicate or orphan local shells;
+- offline and companion-no-result paths terminate cleanly;
+- an already-bound Desktop session still opens immediately;
+- phone sessions and data remain untouched.
+
+## Source map
+
+| Area | Primary files |
+|---|---|
+| Android WebView host | `smali_classes5/com/hermes/android/webui/ChatWebActivity*.smali` |
+| Native bridge | `smali_classes5/com/hermes/android/webui/ChatWebActivity$AndroidBridge*.smali` |
+| Local WebUI server/seeding | `smali_classes5/com/hermes/android/webui/WebUiServer.smali` |
+| Android WebUI integration | `assets/webui/static/apers-android.js`, `apers-android.css` |
+| Base WebUI session logic | `assets/webui/static/sessions.js`, `workspace.js`, `ui.js` |
+| Server/API | `assets/webui/server.py`, `assets/webui/api/` |
+| Activity registration | `AndroidManifest.xml` |
+| Native mesh/handoff | `smali_classes2/com/hermes/android/handoff/` |
+| Build tooling | `scripts/build-apk.sh`, `scripts/verify-apk.sh`, `scripts/install-apk.sh` |
+
+Readable decompiled Java is reference material only. The built application consumes
+smali and bundled assets.
+
+## Android asset revision rule
+
+Changes under `assets/webui/` are copied into persistent app storage. Every shipped
+WebUI asset change must bump the same revision in both places:
+
+1. cache-busting `apers=` values in `assets/webui/static/index.html`;
+2. seed revision and matching log text in
+   `smali_classes5/com/hermes/android/webui/WebUiServer.smali`.
+
+If this is skipped, an installed app may continue running stale JavaScript or CSS even
+when the APK contains the new files.
+
+## Build and device verification
+
+From the repository root:
+
+```powershell
+node --check assets/webui/static/apers-android.js
+git diff --check
+& 'C:\Program Files\Git\bin\bash.exe' scripts/build-apk.sh
+```
+
+Install on the connected device:
+
+```powershell
+$adb = 'D:\LapSlop brotherhood\Programs\scrcpy-win64-v3.3.4\adb.exe'
+& $adb devices
+& $adb install -r 'D:\Letters\MatTroiSeConMoc\apers-android\dist\apers-signed.apk'
+```
+
+`adb install` may first report that incremental installation is not allowed and then
+fall back to a streamed install. A final `Success` is the relevant result.
+
+Verification must include the real phone UI, not only syntax/build checks. Capture
+screenshots with:
+
+```powershell
+& $adb exec-out screencap -p > 'D:\Programs\evTEMP\apers-check.png'
+```
+
+For Desktop transport changes, verify the successful bind, offline failure, timeout,
+restart persistence, and pickup of an already-existing Hermes PC session.
+
+## Working rules
+
+- Do not resurrect the old `feat/webui-chat` or `feat/run-on-computer` plans; both
+  streams are already merged.
+- Do not replace the WebView with the historical Compose redesign.
+- Do not start a second Hermes PC backend.
+- Do not weaken NaCl payload encryption because Tailscale is present.
+- Do not delete projects or conversations during testing.
+- Use temporary data only when necessary and remove it afterward.
+- Demonstrate behavior on-device before committing.
+- Commit only intentional files and push `main` after verification when requested.
+
+## Copy-paste prompt for the current defect
+
+```text
+Work in D:\Letters\MatTroiSeConMoc\apers-android on the current main branch.
+Read docs/PARALLEL_HANDOFF.md, docs/WEBUI_CHAT_HANDOFF.md, and
+docs/RUN_ON_COMPUTER_HANDOFF.md as current architecture references.
+
+Fix the Android Desktop-session flow that remains indefinitely at “Preparing this
+Desktop conversation…” when selecting a PC session without an existing local shell.
+Diagnose the failed /api/session/new path and the subsequent native bind lifecycle.
+Add bounded failure handling and a safe retry without creating duplicate local shells
+or duplicate control requests. Preserve the unified sidebar and all phone sessions.
+
+Bump the Android WebUI asset revision, run node --check and git diff --check, build the
+signed APK, install it on the connected SM-N975F, and verify successful, offline,
+timeout, restart, and already-bound session cases. Do not commit
+artifacts/development/.
+```
