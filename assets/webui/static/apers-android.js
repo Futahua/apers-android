@@ -1,7 +1,8 @@
 (function () {
   'use strict';
 
-  var TARGET_KEY = 'apers-chat-target-v1';
+  var LEGACY_TARGET_KEY = 'apers-chat-target-v1';
+  var ROUTES_KEY = 'apers-computer-routes-v1';
   var THREAD_PREFIX = 'apers-computer-thread-v1:';
   var PENDING_KEY = 'apers-computer-pending-v1';
   var BINDINGS_KEY = 'apers-computer-bindings-v1';
@@ -10,10 +11,11 @@
   var CONTROL_LIST_ID = '__desktop_sessions__';
   var CONTROL_BIND_ID = '__desktop_bind__';
   var CONTROL_NEW_ID = '__desktop_new__';
+  var CONTROL_PORT_ID = '__desktop_port__';
   var CONTROL_LIST_PROMPT = '__APERS_LIST_DESKTOP_SESSIONS_V1__';
   var CONTROL_BIND_PROMPT = '__APERS_BIND_DESKTOP_SESSION_V1__';
   var CONTROL_NEW_PROMPT = '__APERS_NEW_DESKTOP_SESSION_V1__';
-  var target = localStorage.getItem(TARGET_KEY) === 'computer' ? 'computer' : 'phone';
+  var CONTROL_PORT_PROMPT = '__APERS_PORT_PHONE_SESSION_V1__';
   var linked = false;
   var online = false;
   var connectionChecked = false;
@@ -21,6 +23,7 @@
   var lastDesktopSync = 0;
   var pending = readJson(PENDING_KEY, {});
   var bindings = readJson(BINDINGS_KEY, {});
+  var routes = readJson(ROUTES_KEY, {});
   var dispatching = {};
   var controlRequests = {};
   var desktopSessions = [];
@@ -81,11 +84,19 @@
     return bindings[activeSessionId()] || null;
   }
 
+  function isDesktopConversation(sessionId) {
+    return !!sessionId && routes[sessionId] === 'computer';
+  }
+
+  function markDesktopConversation(sessionId) {
+    if (!sessionId) return;
+    routes[sessionId] = 'computer';
+    writeJson(ROUTES_KEY, routes);
+  }
+
   function setComposerBusy(busy, status) {
     if (typeof setBusy === 'function') setBusy(!!busy);
     if (typeof setComposerStatus === 'function') setComposerStatus(status || '');
-    var button = document.getElementById('apersComputerTarget');
-    if (button) button.classList.toggle('is-running', !!busy);
   }
 
   function activePendingOwner() {
@@ -111,7 +122,8 @@
   }
 
   function beginNativeRemoteWorklog(owner, ref) {
-    if (!owner || target !== 'computer' || owner.sessionId !== activeSessionId()) return;
+    if (!owner || !isDesktopConversation(owner.sessionId) ||
+        owner.sessionId !== activeSessionId()) return;
     if (typeof S === 'undefined') return;
     var streamId = remoteStreamId(ref);
     S.toolCalls = remoteToolCalls(owner);
@@ -260,7 +272,8 @@
   }
 
   function renderThread(sessionId) {
-    if (target !== 'computer' || !sessionId || activeSessionId() !== sessionId) return;
+    if (!isDesktopConversation(sessionId) || !sessionId ||
+        activeSessionId() !== sessionId) return;
     var thread = readThread(sessionId);
     S.messages = thread.messages.slice();
     if (typeof renderMessages === 'function') renderMessages();
@@ -287,40 +300,30 @@
   }
 
   function updateTargetUi() {
-    var button = document.getElementById('apersComputerTarget');
-    var label = document.getElementById('apersComputerTargetLabel');
     var desktopStatus = document.getElementById('apersDesktopStatus');
+    var desktopActive = isDesktopConversation(activeSessionId());
     document.querySelectorAll('[data-apers-destination="desktop"]').forEach(function (element) {
-      element.classList.toggle('is-active', target === 'computer');
+      element.classList.toggle('is-active', desktopActive);
       element.classList.toggle('is-linked', online);
       element.classList.toggle('is-paired', linked);
     });
     if (desktopStatus) {
       var binding = activeBinding();
       desktopStatus.textContent = online
-        ? (binding ? binding.title : 'Hermes · PC connected')
+        ? (desktopActive && binding ? binding.title : 'Hermes · PC connected')
         : (linked
           ? (connectionChecked ? 'Hermes · PC unreachable' : 'Hermes · PC checking…')
           : 'Computer not linked');
     }
-    if (!button || !label) return;
-    button.setAttribute('aria-pressed', target === 'computer' ? 'true' : 'false');
-    button.classList.toggle('is-linked', online);
-    button.classList.toggle('is-paired', linked);
-    button.classList.toggle('is-offline', !online);
-    var selected = activeBinding();
-    label.textContent = target === 'computer'
-      ? (online
-        ? (selected ? selected.title : 'Hermes · PC')
+    if (desktopActive && !S.busy && typeof setComposerStatus === 'function') {
+      setComposerStatus(online
+        ? ''
         : (linked
-          ? (connectionChecked ? 'PC unreachable' : 'PC checking…')
-          : 'Computer not linked'))
-      : 'This phone';
-    button.title = online
-      ? 'Hermes on your computer is online'
-      : (linked
-        ? 'Hermes is paired; checking the live connection'
-        : 'Link a computer in the original app, then use it from this chat');
+          ? (connectionChecked
+            ? 'Hermes PC is offline. This conversation is available read-only.'
+            : 'Checking Hermes PC…')
+          : 'Link Hermes PC to continue this conversation.'));
+    }
   }
 
   function refreshLinkStatus() {
@@ -348,6 +351,14 @@
     if (!refreshLinkStatus()) {
       if (typeof showToast === 'function') {
         showToast('Link this phone to Hermes on your computer first.', 3500, 'error');
+      }
+      return;
+    }
+    if (connectionChecked && !online) {
+      updateTargetUi();
+      if (typeof showToast === 'function') {
+        showToast('Hermes PC is offline. Reconnect it to continue this conversation.',
+          3500, 'error');
       }
       return;
     }
@@ -391,31 +402,7 @@
     host.sendToComputer(thread.conversationId, text);
   }
 
-  function restorePhoneSession() {
-    var sessionId = activeSessionId();
-    if (sessionId && typeof loadSession === 'function') {
-      Promise.resolve(loadSession(sessionId)).catch(function () {});
-    }
-  }
-
-  function toggleTarget() {
-    setTarget(target === 'computer' ? 'phone' : 'computer');
-  }
-
-  function setTarget(nextTarget) {
-    target = nextTarget === 'computer' ? 'computer' : 'phone';
-    localStorage.setItem(TARGET_KEY, target);
-    refreshLinkStatus();
-    if (target === 'computer') {
-      renderThread(activeSessionId());
-    } else {
-      setComposerBusy(false, '');
-      restorePhoneSession();
-    }
-  }
-
   function openDesktop() {
-    setTarget('computer');
     if (typeof switchPanel === 'function') {
       switchPanel('chat', { fromRailClick: true });
     }
@@ -446,9 +433,14 @@
         '<div class="apers-desktop-sheet-handle" aria-hidden="true"></div>' +
         '<header class="apers-desktop-sheet-head">' +
           '<div><strong id="apersDesktopPickerTitle">Desktop sessions</strong>' +
-          '<small>Continue a Hermes PC conversation on this phone</small></div>' +
+          '<small>Open a PC conversation or move this phone chat to Desktop</small></div>' +
           '<button type="button" data-apers-picker-close aria-label="Close">×</button>' +
         '</header>' +
+        '<button type="button" class="apers-desktop-new" data-apers-desktop-port>' +
+          '<span class="apers-desktop-session-icon">⇧</span>' +
+          '<span><strong>Continue this chat on Desktop</strong>' +
+          '<small>Copy this phone conversation to Hermes PC</small></span>' +
+        '</button>' +
         '<button type="button" class="apers-desktop-new" data-apers-desktop-new>' +
           '<span class="apers-desktop-session-icon">＋</span>' +
           '<span><strong>New Desktop session</strong>' +
@@ -469,6 +461,9 @@
       }
       var item = event.target.closest('[data-apers-session-id]');
       if (item) bindDesktopSession(item.dataset.apersSessionId, false);
+      if (event.target.closest('[data-apers-desktop-port]')) {
+        portPhoneSession();
+      }
       if (event.target.closest('[data-apers-desktop-new]')) {
         startNewDesktopSession();
       }
@@ -494,7 +489,8 @@
     var list = picker.querySelector('[data-apers-desktop-list]');
     var search = picker.querySelector('[data-apers-desktop-search]');
     var query = String(search && search.value || '').trim().toLowerCase();
-    var selected = activeBinding();
+    var selected = isDesktopConversation(activeSessionId())
+      ? activeBinding() : null;
     list.innerHTML = '';
     var shown = desktopSessions.filter(function (session) {
       if (!query) return true;
@@ -557,6 +553,8 @@
       showPickerState('Could not create a local conversation.', true);
       return;
     }
+    var port = picker.querySelector('[data-apers-desktop-port]');
+    if (port) port.hidden = isDesktopConversation(sessionId);
     requestDesktopSessions(sessionId);
   }
 
@@ -576,7 +574,8 @@
 
   function dispatchControl(conversation, kind, prompt, sessionId, extra) {
     var host = bridge();
-    if (!host || typeof host.sendToComputer !== 'function' || !refreshLinkStatus()) {
+    if (!host || typeof host.sendToComputer !== 'function' || !refreshLinkStatus() ||
+        (connectionChecked && !online)) {
       showPickerState('Hermes PC is unreachable.', true);
       return;
     }
@@ -598,8 +597,30 @@
       sessionId);
   }
 
-  function bindDesktopSession(desktopSessionId, silent) {
+  async function ensureDesktopShell() {
+    var current = activeSessionId();
+    if (isDesktopConversation(current)) return current;
+    await newSession(undefined, { worktree: false });
+    if (typeof renderSessionList === 'function') await renderSessionList();
     var sessionId = activeSessionId();
+    markDesktopConversation(sessionId);
+    saveThread(sessionId, {
+      conversationId: conversationId(sessionId),
+      messages: []
+    });
+    return sessionId;
+  }
+
+  async function bindDesktopSession(desktopSessionId, silent, sessionOverride) {
+    var sessionId = sessionOverride || activeSessionId();
+    if (!silent && !isDesktopConversation(sessionId)) {
+      if (!refreshLinkStatus()) {
+        showPickerState('Hermes PC is unreachable.', true);
+        return;
+      }
+      showPickerState('Preparing this Desktop conversation…', false);
+      sessionId = await ensureDesktopShell();
+    }
     if (!sessionId || hasPendingControl('bind')) return;
     if (!silent) showPickerState('Loading conversation…', false);
     dispatchControl(
@@ -613,8 +634,15 @@
       { desktopSessionId: desktopSessionId, silent: !!silent });
   }
 
-  function startNewDesktopSession() {
+  async function startNewDesktopSession() {
     var sessionId = activeSessionId();
+    if (!isDesktopConversation(sessionId)) {
+      if (!refreshLinkStatus()) {
+        showPickerState('Hermes PC is unreachable.', true);
+        return;
+      }
+      sessionId = await ensureDesktopShell();
+    }
     if (!sessionId || hasPendingControl('new')) return;
     showPickerState('Preparing a new Desktop session…', false);
     dispatchControl(
@@ -622,6 +650,67 @@
       'new',
       CONTROL_NEW_PROMPT + '\n' + JSON.stringify({
         conversation_id: conversationId(sessionId)
+      }),
+      sessionId);
+  }
+
+  function boundedPhoneTranscript() {
+    var source = typeof S !== 'undefined' && Array.isArray(S.messages)
+      ? S.messages : [];
+    var rows = source.map(function (message) {
+      var role = String(message.role || '');
+      if (role !== 'user' && role !== 'assistant' && role !== 'tool') return null;
+      var row = {
+        role: role,
+        content: String(message.content || '').slice(0, 12000),
+        timestamp: Number(message.timestamp || message._ts) || Date.now() / 1000
+      };
+      if (role === 'assistant' && Array.isArray(message.tool_calls)) {
+        row.tool_calls = message.tool_calls;
+      }
+      if (role === 'tool') {
+        if (!message.tool_call_id) return null;
+        row.tool_call_id = String(message.tool_call_id);
+        row.name = String(message.name || message.tool_name || '').slice(0, 160);
+      }
+      if (message.reasoning || message.reasoning_content) {
+        row.reasoning = String(
+          message.reasoning_content || message.reasoning).slice(0, 12000);
+      }
+      return row;
+    }).filter(Boolean);
+    var kept = [];
+    var size = 0;
+    for (var i = rows.length - 1; i >= 0; i--) {
+      var encoded = JSON.stringify(rows[i]);
+      if (kept.length && size + encoded.length > 42000) break;
+      kept.unshift(rows[i]);
+      size += encoded.length;
+    }
+    while (kept.length && kept[0].role !== 'user') kept.shift();
+    return kept;
+  }
+
+  function portPhoneSession() {
+    var sessionId = activeSessionId();
+    if (!sessionId || isDesktopConversation(sessionId) ||
+        hasPendingControl('port')) return;
+    var messages = boundedPhoneTranscript();
+    if (!messages.length) {
+      showPickerState('Send at least one message before moving this chat.', true);
+      return;
+    }
+    showPickerState('Copying this conversation to Hermes PC…', false);
+    dispatchControl(
+      CONTROL_PORT_ID,
+      'port',
+      CONTROL_PORT_PROMPT + '\n' + JSON.stringify({
+        conversation_id: conversationId(sessionId),
+        port_id: conversationId(sessionId),
+        title: String(S.session && S.session.title || '').slice(0, 120),
+        model: String(S.session && S.session.model || '').slice(0, 160),
+        workspace: String(S.session && S.session.workspace || '').slice(0, 1024),
+        messages: messages
       }),
       sessionId);
   }
@@ -773,6 +862,16 @@
         _error: !result.ok
       });
       saveThread(owner.sessionId, thread);
+      if (result.session_id && !bindings[owner.sessionId]) {
+        bindings[owner.sessionId] = {
+          id: String(result.session_id),
+          title: 'Desktop conversation',
+          source: 'desktop',
+          last_active: Number(result.created) || Date.now() / 1000
+        };
+        markDesktopConversation(owner.sessionId);
+        writeJson(BINDINGS_KEY, bindings);
+      }
       delete pending[ref];
       accepted.push(String(result.id));
       if (typeof S !== 'undefined') {
@@ -790,6 +889,51 @@
         host.ackComputerResults(JSON.stringify(accepted));
       }
     }
+  }
+
+  function applyDesktopHistory(owner, value) {
+    var remoteSession = value.session || {};
+    bindings[owner.sessionId] = remoteSession;
+    markDesktopConversation(owner.sessionId);
+    writeJson(BINDINGS_KEY, bindings);
+    var thread = {
+      conversationId: owner.conversationId,
+      messages: (Array.isArray(value.messages) ? value.messages : []).map(function (message) {
+        var mapped = {
+          role: message.role,
+          content: String(message.content || ''),
+          _ts: Number(message.timestamp) || Date.now() / 1000,
+          _computer: true
+        };
+        if (Array.isArray(message.tool_calls)) {
+          mapped.tool_calls = message.tool_calls;
+        }
+        if (message.tool_call_id) {
+          mapped.tool_call_id = String(message.tool_call_id);
+        }
+        if (message.name) mapped.name = String(message.name);
+        if (message.reasoning) mapped.reasoning = String(message.reasoning);
+        return mapped;
+      })
+    };
+    saveThread(owner.sessionId, thread);
+    lastDesktopSync = Date.now();
+    updateTargetUi();
+    renderThread(owner.sessionId);
+    var title = String(remoteSession.title || '').trim();
+    if (title && typeof api === 'function') {
+      api('/api/session/rename', {
+        method: 'POST',
+        body: JSON.stringify({ session_id: owner.sessionId, title: title })
+      }).then(function () {
+        if (S.session && S.session.session_id === owner.sessionId) {
+          S.session.title = title;
+          if (typeof syncTopbar === 'function') syncTopbar();
+        }
+        if (typeof renderSessionList === 'function') renderSessionList();
+      }).catch(function () {});
+    }
+    return remoteSession;
   }
 
   function handleControlResult(owner, result) {
@@ -812,48 +956,23 @@
       var selected = desktopSessions.find(function (session) {
         return session.id === selectedId;
       });
-      if (selected) {
+      var desktopOwner = isDesktopConversation(owner.sessionId);
+      if (desktopOwner && selected) {
         bindings[owner.sessionId] = selected;
         writeJson(BINDINGS_KEY, bindings);
-      } else if (!selectedId && bindings[owner.sessionId]) {
+      } else if (desktopOwner && !selectedId && bindings[owner.sessionId]) {
         delete bindings[owner.sessionId];
         writeJson(BINDINGS_KEY, bindings);
       }
       updateTargetUi();
       renderDesktopSessionList();
-      if (selected && !hasPendingControl('bind')) {
-        bindDesktopSession(selected.id, true);
+      if (desktopOwner && selected && !hasPendingControl('bind')) {
+        bindDesktopSession(selected.id, true, owner.sessionId);
       }
       return;
     }
     if (owner.kind === 'bind') {
-      var remoteSession = value.session || {};
-      bindings[owner.sessionId] = remoteSession;
-      writeJson(BINDINGS_KEY, bindings);
-      var thread = {
-        conversationId: owner.conversationId,
-        messages: (Array.isArray(value.messages) ? value.messages : []).map(function (message) {
-          var mapped = {
-            role: message.role,
-            content: String(message.content || ''),
-            _ts: Number(message.timestamp) || Date.now() / 1000,
-            _computer: true
-          };
-          if (Array.isArray(message.tool_calls)) {
-            mapped.tool_calls = message.tool_calls;
-          }
-          if (message.tool_call_id) {
-            mapped.tool_call_id = String(message.tool_call_id);
-          }
-          if (message.name) mapped.name = String(message.name);
-          if (message.reasoning) mapped.reasoning = String(message.reasoning);
-          return mapped;
-        })
-      };
-      saveThread(owner.sessionId, thread);
-      lastDesktopSync = Date.now();
-      updateTargetUi();
-      renderThread(owner.sessionId);
+      var remoteSession = applyDesktopHistory(owner, value);
       if (!owner.silent) {
         closeDesktopSessions();
         if (typeof showToast === 'function') {
@@ -866,6 +985,7 @@
     }
     if (owner.kind === 'new') {
       delete bindings[owner.sessionId];
+      markDesktopConversation(owner.sessionId);
       writeJson(BINDINGS_KEY, bindings);
       saveThread(owner.sessionId, {
         conversationId: owner.conversationId,
@@ -876,6 +996,16 @@
       closeDesktopSessions();
       if (typeof showToast === 'function') {
         showToast('New Desktop session ready.', 2200);
+      }
+      return;
+    }
+    if (owner.kind === 'port') {
+      var ported = applyDesktopHistory(owner, value);
+      closeDesktopSessions();
+      if (typeof showToast === 'function') {
+        showToast(
+          '“' + (ported.title || 'Phone conversation') + '” is now available on Desktop.',
+          3200);
       }
     }
   }
@@ -926,8 +1056,6 @@
   };
 
   window.ApersComputerChat = {
-    toggleTarget: toggleTarget,
-    setTarget: setTarget,
     openDesktop: openDesktop,
     openDesktopSessions: openDesktopSessions,
     onDispatch: onDispatch,
@@ -943,12 +1071,13 @@
   if (typeof window.send === 'function') {
     var phoneSend = window.send;
     window.send = function () {
-      if (target === 'computer') return sendComputerMessage();
+      if (isDesktopConversation(activeSessionId())) return sendComputerMessage();
       return phoneSend.apply(this, arguments);
     };
   }
 
   function start() {
+    localStorage.removeItem(LEGACY_TARGET_KEY);
     revealAndroidActions();
     installDrawerBackdrop();
     createDesktopPicker();
@@ -958,17 +1087,24 @@
     updateTargetUi();
     setInterval(function () {
       var current = activeSessionId();
-      if (target === 'computer' && current && current !== lastActiveSessionId) {
+      if (current && current !== lastActiveSessionId &&
+          isDesktopConversation(current)) {
         lastActiveSessionId = current;
         renderThread(current);
       } else {
+        if (current !== lastActiveSessionId &&
+            !isDesktopConversation(current) &&
+            typeof setComposerStatus === 'function') {
+          setComposerStatus('');
+        }
         lastActiveSessionId = current;
       }
+      updateTargetUi();
       var binding = activeBinding();
       var normalPending = Object.keys(pending).some(function (id) {
         return pending[id] && !pending[id].kind;
       });
-      if (target === 'computer' && binding && !normalPending &&
+      if (isDesktopConversation(current) && binding && !normalPending &&
           !hasPendingControl('bind') && Date.now() - lastDesktopSync > 20000) {
         bindDesktopSession(binding.id, true);
       }

@@ -75,56 +75,8 @@ body.apers-android-host,
   box-shadow: 0 1px 2px rgba(30, 27, 22, .04);
 }
 
-.apers-computer-target {
-  align-items: center;
-  background: transparent;
-  border: 1px solid var(--border2);
-  border-radius: 7px;
-  color: var(--muted);
-  cursor: pointer;
-  display: inline-flex;
-  flex: 0 0 auto;
-  font: inherit;
-  font-size: 11px;
-  gap: 6px;
-  min-height: 28px;
-  padding: 4px 9px;
-}
-
-.apers-computer-target:hover,
-.apers-computer-target[aria-pressed="true"] {
-  background: var(--hover-bg);
-  color: var(--text);
-}
-
-.apers-computer-target-dot {
-  background: var(--muted);
-  border-radius: 50%;
-  height: 7px;
-  width: 7px;
-}
-
-.apers-computer-target.is-linked .apers-computer-target-dot,
 .apers-sidebar-destination.is-linked:first-child svg {
   color: #397b78;
-}
-
-.apers-computer-target.is-linked .apers-computer-target-dot {
-  background: #397b78;
-  box-shadow: 0 0 0 3px rgba(57, 123, 120, .12);
-}
-
-.apers-computer-target.is-offline .apers-computer-target-dot {
-  background: #b9894f;
-}
-
-.apers-computer-target.is-running .apers-computer-target-dot {
-  animation: apers-computer-pulse 1.1s ease-in-out infinite;
-  background: var(--accent);
-}
-
-@keyframes apers-computer-pulse {
-  50% { opacity: .35; transform: scale(.78); }
 }
 
 .apers-sidebar-destinations {
@@ -287,6 +239,10 @@ body.apers-android-host,
   background: var(--surface-subtle);
   border: 1px solid var(--border-subtle);
   margin-bottom: 9px;
+}
+
+.apers-desktop-new[hidden] {
+  display: none;
 }
 
 .apers-desktop-new:hover,
@@ -471,14 +427,6 @@ body.apers-android-host,
     font-size: 15px;
     line-height: 1.5;
     padding: 10px 12px 4px;
-  }
-
-  .apers-android-host .apers-computer-target {
-    max-width: 138px;
-    min-height: 34px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .apers-android-host .apers-desktop-picker {
