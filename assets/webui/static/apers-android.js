@@ -9,6 +9,7 @@
   var DESKTOP_CATALOG_KEY = 'apers-desktop-catalog-v1';
   var PHONE_ORDER_KEY = 'apers-phone-session-order-v1';
   var PROJECT_ORDER_KEY = 'apers-phone-project-order-v1';
+  var DESKTOP_PROJECT_ORDER_KEY = 'apers-desktop-project-order-v1';
   var RESULT_PREFIX = '__APERS_CHAT_RESULT_V1__:';
   var PROGRESS_PREFIX = '__APERS_PROGRESS_V1__\n';
   var CONTROL_LIST_ID = '__desktop_sessions__';
@@ -420,7 +421,7 @@
     if (typeof switchPanel === 'function') {
       switchPanel('chat', { fromRailClick: true });
     }
-    setSidebarMode('desktop');
+    setSidebarMode(sidebarMode === 'desktop' ? 'phone' : 'desktop');
   }
 
   async function ensurePhoneSession() {
@@ -589,6 +590,12 @@
     titleRow.appendChild(age);
     text.appendChild(titleRow);
     row.appendChild(text);
+    if (typeof _buildSessionRenameStarter === 'function') {
+      row._startRename = _buildSessionRenameStarter(
+        session,
+        title,
+        function (nextTitle) { title.textContent = nextTitle || 'Untitled'; });
+    }
     attachPhoneSessionGesture(row, session);
     body.appendChild(row);
   }
@@ -650,7 +657,7 @@
       group.rows.forEach(function (session) { appendSessionRow(body, session); });
       wrapper.appendChild(header);
       wrapper.appendChild(body);
-      if (group.id) attachProjectGesture(header, wrapper);
+      if (group.id) attachProjectGesture(header, wrapper, persistProjectDomOrder);
       list.appendChild(wrapper);
     });
     if (!rows.length && query) {
@@ -699,10 +706,6 @@
       return (String(session.title || '') + ' ' + String(session.preview || ''))
         .toLowerCase().indexOf(query) >= 0;
     });
-    var heading = document.createElement('div');
-    heading.className = 'apers-project-heading apers-desktop-heading';
-    heading.textContent = 'Hermes PC';
-    list.appendChild(heading);
     if (sidebarState) {
       appendSidebarState(list, sidebarState, sidebarStateIsError);
     } else if (!rows.length) {
@@ -714,7 +717,45 @@
             : 'No Desktop sessions yet.'),
         false);
     }
-    rows.forEach(function (session) { appendDesktopRow(list, session); });
+    var groupsById = {};
+    rows.forEach(function (session) {
+      var id = String(session.workspace_id || session.workspace || '');
+      if (!groupsById[id]) {
+        groupsById[id] = {
+          id: id,
+          name: String(session.workspace_name || 'Unassigned'),
+          rows: []
+        };
+      }
+      groupsById[id].rows.push(session);
+    });
+    var projectOrder = readJson(DESKTOP_PROJECT_ORDER_KEY, []);
+    var groups = Object.keys(groupsById).map(function (id) { return groupsById[id]; });
+    groups.sort(function (a, b) {
+      var ai = projectOrder.indexOf(a.id);
+      var bi = projectOrder.indexOf(b.id);
+      if (ai < 0) ai = Number.MAX_SAFE_INTEGER;
+      if (bi < 0) bi = Number.MAX_SAFE_INTEGER;
+      if (ai !== bi) return ai - bi;
+      return a.name.localeCompare(b.name);
+    });
+    groups.forEach(function (group) {
+      var wrapper = document.createElement('section');
+      wrapper.className = 'apers-project-group apers-desktop-project-group';
+      wrapper.dataset.desktopProjectId = group.id;
+      var header = document.createElement('div');
+      header.className = 'apers-project-heading';
+      header.textContent = group.name;
+      var body = document.createElement('div');
+      body.className = 'apers-project-body';
+      group.rows.forEach(function (session) { appendDesktopRow(body, session); });
+      wrapper.appendChild(header);
+      wrapper.appendChild(body);
+      if (group.id) {
+        attachProjectGesture(header, wrapper, persistDesktopProjectDomOrder);
+      }
+      list.appendChild(wrapper);
+    });
   }
 
   function appendSidebarState(list, message, isError) {
@@ -749,7 +790,16 @@
     writeJson(PROJECT_ORDER_KEY, ids);
   }
 
-  function attachProjectGesture(header, wrapper) {
+  function persistDesktopProjectDomOrder() {
+    var ids = Array.prototype.map.call(
+      document.querySelectorAll(
+        '#sessionList .apers-desktop-project-group' +
+        '[data-desktop-project-id]:not([data-desktop-project-id=""])'),
+      function (group) { return group.dataset.desktopProjectId; });
+    writeJson(DESKTOP_PROJECT_ORDER_KEY, ids);
+  }
+
+  function attachProjectGesture(header, wrapper, persistOrder) {
     var timer = null;
     var dragging = false;
     var held = false;
@@ -775,7 +825,10 @@
       event.preventDefault();
       wrapper.classList.add('is-dragging');
       var target = document.elementFromPoint(event.clientX, event.clientY);
-      var targetGroup = target && target.closest('.apers-project-group[data-project-id]:not([data-project-id=""])');
+      var selector = wrapper.classList.contains('apers-desktop-project-group')
+        ? '.apers-desktop-project-group[data-desktop-project-id]'
+        : '.apers-project-group[data-project-id]:not([data-project-id=""])';
+      var targetGroup = target && target.closest(selector);
       if (!targetGroup || targetGroup === wrapper) return;
       var rect = targetGroup.getBoundingClientRect();
       targetGroup.parentNode.insertBefore(
@@ -787,7 +840,7 @@
       timer = null;
       header.classList.remove('long-pressing');
       wrapper.classList.remove('is-dragging');
-      if (dragging) persistProjectDomOrder();
+      if (dragging && persistOrder) persistOrder();
       dragging = false;
       held = false;
     };
@@ -796,6 +849,10 @@
   }
 
   function attachPhoneSessionGesture(row, session) {
+    var grip = document.createElement('span');
+    grip.className = 'apers-session-grip';
+    grip.setAttribute('aria-hidden', 'true');
+    row.appendChild(grip);
     attachManagedGesture(row, {
       click: function () {
         if (Date.now() < suppressSessionClickUntil) return;
@@ -803,34 +860,34 @@
           Promise.resolve(loadSession(session.session_id)).then(closeSidebarIfOpen);
         }
       },
-      menu: function () { openPhoneSessionActions(session); },
-      dropped: async function () {
-        persistPhoneDomOrder();
-        var body = row.closest('.apers-project-body');
-        var nextProject = body ? String(body.dataset.projectId || '') : '';
-        var previousProject = String(session.project_id || '');
-        if (nextProject !== previousProject && typeof api === 'function') {
-          try {
-            await api('/api/session/move', {
-              method: 'POST',
-              body: JSON.stringify({
-                session_id: session.session_id,
-                project_id: nextProject || null
-              })
-            });
-            session.project_id = nextProject || null;
-            var cached = _allSessions.find(function (item) {
-              return item && item.session_id === session.session_id;
-            });
-            if (cached) cached.project_id = session.project_id;
-          } catch (error) {
-            if (typeof showToast === 'function') {
-              showToast('Move failed: ' + String(error.message || error), 3000, 'error');
-            }
+      menu: function () { openPhoneSessionActions(session, row); }
+    });
+    attachSessionDragGrip(grip, row, async function () {
+      persistPhoneDomOrder();
+      var body = row.closest('.apers-project-body');
+      var nextProject = body ? String(body.dataset.projectId || '') : '';
+      var previousProject = String(session.project_id || '');
+      if (nextProject !== previousProject && typeof api === 'function') {
+        try {
+          await api('/api/session/move', {
+            method: 'POST',
+            body: JSON.stringify({
+              session_id: session.session_id,
+              project_id: nextProject || null
+            })
+          });
+          session.project_id = nextProject || null;
+          var cached = _allSessions.find(function (item) {
+            return item && item.session_id === session.session_id;
+          });
+          if (cached) cached.project_id = session.project_id;
+        } catch (error) {
+          if (typeof showToast === 'function') {
+            showToast('Move failed: ' + String(error.message || error), 3000, 'error');
           }
         }
-        renderUnifiedSidebar();
       }
+      renderUnifiedSidebar();
     });
   }
 
@@ -847,11 +904,11 @@
   function attachManagedGesture(row, handlers) {
     var timer = null;
     var held = false;
-    var dragging = false;
+    var menuOpened = false;
     var startX = 0;
     var startY = 0;
-    var pointerId = null;
     row.addEventListener('click', function (event) {
+      if (event.target.closest('.apers-session-grip')) return;
       if (Date.now() < suppressSessionClickUntil) {
         event.preventDefault();
         event.stopPropagation();
@@ -860,12 +917,12 @@
       handlers.click();
     });
     row.addEventListener('pointerdown', function (event) {
+      if (event.target.closest('.apers-session-grip')) return;
       if (event.button !== undefined && event.button !== 0) return;
       startX = event.clientX;
       startY = event.clientY;
-      pointerId = event.pointerId;
       held = false;
-      dragging = false;
+      menuOpened = false;
       timer = setTimeout(function () {
         held = true;
         row.classList.add('long-pressing');
@@ -881,13 +938,71 @@
         }
         return;
       }
-      if (dx <= 7 && dy <= 7 && !dragging) return;
-      if (!row.dataset.sid) return;
+      if (held && (dx > 7 || dy > 7) && timer) {
+        clearTimeout(timer);
+        timer = null;
+        held = false;
+        row.classList.remove('long-pressing');
+      }
+    }, { passive: false });
+    var finish = function () {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      row.classList.remove('long-pressing');
+      if (held && !menuOpened) {
+        menuOpened = true;
+        suppressSessionClickUntil = Date.now() + 700;
+        handlers.menu();
+      }
+      held = false;
+    };
+    row.addEventListener('pointerup', finish);
+    row.addEventListener('pointercancel', finish);
+    row.addEventListener('contextmenu', function (event) {
+      event.preventDefault();
+      if (event.target.closest('.apers-session-grip')) return;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      held = false;
+      row.classList.remove('long-pressing');
+      if (menuOpened) return;
+      menuOpened = true;
+      suppressSessionClickUntil = Date.now() + 700;
+      handlers.menu();
+    });
+  }
+
+  function attachSessionDragGrip(grip, row, onDrop) {
+    var dragging = false;
+    var startY = 0;
+    var pointerId = null;
+    grip.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    grip.addEventListener('contextmenu', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    grip.addEventListener('pointerdown', function (event) {
+      if (event.button !== undefined && event.button !== 0) return;
+      dragging = false;
+      startY = event.clientY;
+      pointerId = event.pointerId;
+      event.preventDefault();
+      event.stopPropagation();
+      document.addEventListener('pointermove', move, true);
+      document.addEventListener('pointerup', finish, true);
+      document.addEventListener('pointercancel', finish, true);
+    });
+    var move = function (event) {
+      if (event.pointerId !== pointerId) return;
+      if (!dragging && Math.abs(event.clientY - startY) < 5) return;
       dragging = true;
       suppressSessionClickUntil = Date.now() + 700;
-      row.classList.remove('long-pressing');
       row.classList.add('is-dragging');
       event.preventDefault();
+      event.stopPropagation();
       var target = document.elementFromPoint(event.clientX, event.clientY);
       if (!target) return;
       var targetRow = target.closest('.apers-unified-session[data-sid]');
@@ -901,28 +1016,20 @@
       } else if (targetBody && targetBody !== row.parentNode) {
         targetBody.appendChild(row);
       }
-    }, { passive: false });
-    var finish = function () {
-      if (timer) clearTimeout(timer);
-      timer = null;
-      row.classList.remove('long-pressing', 'is-dragging');
+    };
+    var finish = function (event) {
+      if (event.pointerId !== pointerId) return;
+      document.removeEventListener('pointermove', move, true);
+      document.removeEventListener('pointerup', finish, true);
+      document.removeEventListener('pointercancel', finish, true);
       if (dragging) {
         suppressSessionClickUntil = Date.now() + 700;
-        if (handlers.dropped) handlers.dropped();
-      } else if (held) {
-        suppressSessionClickUntil = Date.now() + 700;
-        handlers.menu();
+        if (onDrop) onDrop();
       }
-      held = false;
+      row.classList.remove('is-dragging');
       dragging = false;
       pointerId = null;
     };
-    row.addEventListener('pointerup', finish);
-    row.addEventListener('pointercancel', finish);
-    row.addEventListener('contextmenu', function (event) {
-      event.preventDefault();
-      handlers.menu();
-    });
   }
 
   function closeActionSheet() {
@@ -964,57 +1071,33 @@
     document.body.appendChild(backdrop);
   }
 
-  function openPhoneSessionActions(session) {
-    openActionSheet(sessionTitle(session), [
-      {
-        label: 'Rename',
-        run: async function () {
-          var title = await showPromptDialog({
-            message: 'Rename conversation',
-            confirmLabel: 'Rename',
-            value: sessionTitle(session),
-            placeholder: 'Conversation name'
-          });
-          title = String(title || '').trim();
-          if (!title) return;
-          try {
-            await api('/api/session/rename', {
-              method: 'POST',
-              body: JSON.stringify({ session_id: session.session_id, title: title })
-            });
-            session.title = title;
-            session.display_title = title;
-            renderUnifiedSidebar();
-          } catch (error) {
-            showToast('Rename failed: ' + String(error.message || error), 3000, 'error');
-          }
-        }
-      },
-      {
-        label: 'Move to project',
-        run: function () {
-          if (typeof _showProjectPicker === 'function') {
-            _showProjectPicker(session, document.querySelector(
-              '.apers-unified-session[data-sid="' + session.session_id + '"]') ||
-              document.getElementById('sessionList'));
-          }
-        }
-      },
-      {
-        label: 'Continue on Desktop',
-        run: async function () {
-          if (typeof loadSession === 'function') await loadSession(session.session_id);
-          portPhoneSession();
-        }
-      },
-      {
-        label: 'Archive',
-        danger: true,
-        run: function () {
-          if (typeof _archiveSession === 'function') _archiveSession(session, true);
-        }
-      }
-    ]);
+  function openPhoneSessionActions(session, row) {
+    if (typeof _openSessionActionMenu !== 'function') return;
+    _openSessionActionMenu(session, row);
+    var menu = document.querySelector('.session-action-menu');
+    if (!menu || menu.querySelector('[data-apers-continue-desktop]') ||
+        typeof _buildSessionAction !== 'function') return;
+    var action = _buildSessionAction(
+      'Continue on Desktop',
+      'Copy this phone conversation to Hermes PC',
+      (typeof ICONS !== 'undefined' && ICONS.dup) ? ICONS.dup : '',
+      async function () {
+        if (typeof closeSessionActionMenu === 'function') closeSessionActionMenu();
+        if (typeof loadSession === 'function') await loadSession(session.session_id);
+        portPhoneSession();
+      });
+    action.setAttribute('data-apers-continue-desktop', '');
+    var archiveAction = Array.prototype.find.call(
+      menu.querySelectorAll('.session-action-opt'),
+      function (item) {
+        return item.querySelector('.ws-opt-name') &&
+          item.querySelector('.ws-opt-name').textContent ===
+            (typeof t === 'function' ? t('session_archive') : 'Archive');
+      });
+    menu.insertBefore(action, archiveAction || null);
+    if (typeof _positionSessionActionMenu === 'function') {
+      _positionSessionActionMenu(row);
+    }
   }
 
   function openDesktopSessionActions(session) {

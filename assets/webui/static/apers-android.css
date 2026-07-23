@@ -181,8 +181,22 @@ body.apers-android-host,
 
 .apers-unified-session {
   cursor: default;
+  position: relative;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.apers-unified-session[data-sid] {
+  margin-right: 22px;
+}
+
+.apers-session-grip {
+  bottom: 0;
+  left: 100%;
+  position: absolute;
+  touch-action: none;
+  width: 22px;
+  top: 0;
 }
 
 .apers-unified-session.long-pressing {
