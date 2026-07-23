@@ -1960,7 +1960,7 @@
     .line 4727
     new-array v1, v1, [Landroidx/compose/ui/graphics/Color;
 
-    const-wide v15, 0xff2563a8L
+    const-wide v15, 0xff516b79L
 
     invoke-static/range {v15 .. v16}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
 
@@ -1974,7 +1974,7 @@
 
     aput-object v3, v1, v8
 
-    const-wide v15, 0xff3b82cfL
+    const-wide v15, 0xff5b7885L
 
     invoke-static/range {v15 .. v16}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
 
@@ -3989,7 +3989,7 @@
 
     move-result-object v2
 
-    const-wide v3, 0xff1e2536L
+    const-wide v3, 0xff111124L
 
     .line 4930
     invoke-static {v3, v4}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
@@ -4454,7 +4454,8 @@
 
     move-result-object v7
 
-    const-wide v3, 0xff0b0f1aL
+    # Papers Dark canvas (was terminal blue #0b0f1a)
+    const-wide v3, 0xff0a0a18L
 
     .line 5013
     invoke-static {v3, v4}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J

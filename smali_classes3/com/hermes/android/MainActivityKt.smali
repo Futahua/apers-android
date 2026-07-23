@@ -1416,7 +1416,7 @@
     .line 104
     new-array v1, v7, [Landroidx/compose/ui/graphics/Color;
 
-    const-wide v2, 0xff2563a8L
+    const-wide v2, 0xff0a0a18L
 
     invoke-static {v2, v3}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
 
@@ -1430,7 +1430,7 @@
 
     aput-object v2, v1, v8
 
-    const-wide v2, 0xff3b82cfL
+    const-wide v2, 0xff111124L
 
     .line 105
     invoke-static {v2, v3}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
@@ -1445,7 +1445,7 @@
 
     aput-object v2, v1, v9
 
-    const-wide v2, 0xff6aabeaL
+    const-wide v2, 0xff1a1a30L
 
     .line 106
     invoke-static {v2, v3}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
@@ -11673,7 +11673,7 @@
     invoke-static {v0, v1, v2, v3}, Landroidx/compose/runtime/ComposerKt;->traceEventStart(IIILjava/lang/String;)V
 
     :cond_4
-    const-wide v2, 0xff3b82cfL
+    const-wide v2, 0xff111124L
 
     .line 224
     invoke-static {v2, v3}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
@@ -11687,7 +11687,7 @@
 
     move-result-wide v12
 
-    const-wide v4, 0xff2563a8L
+    const-wide v4, 0xff0a0a18L
 
     .line 226
     invoke-static {v4, v5}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
@@ -19446,7 +19446,7 @@
 
     invoke-static {v0, v4, v8, v1}, Landroidx/compose/runtime/EffectsKt;->LaunchedEffect(Ljava/lang/Object;Lkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)V
 
-    const-wide v20, 0xff2563a8L
+    const-wide v20, 0xff0a0a18L
 
     .line 1714
     invoke-static/range {v20 .. v21}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
@@ -20359,7 +20359,7 @@
 
     move-result v6
 
-    const-wide v7, 0xff3b82cfL
+    const-wide v7, 0xff111124L
 
     .line 2037
     invoke-static {v7, v8}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
@@ -22034,7 +22034,7 @@
 
     move-result-object v4
 
-    const-wide v64, 0xff3b82cfL
+    const-wide v64, 0xff111124L
 
     .line 2130
     invoke-static/range {v64 .. v65}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
@@ -27342,7 +27342,7 @@
 
     move-result-wide v2
 
-    const-wide v4, 0xff2563a8L
+    const-wide v4, 0xff0a0a18L
 
     .line 986
     invoke-static {v4, v5}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
@@ -43444,7 +43444,12 @@
     .line 3910
     const-string v0, "chatskin_mode"
 
-    invoke-interface {v4, v0, v10}, Landroid/content/SharedPreferences;->getBoolean(Ljava/lang/String;Z)Z
+    # Desktop-style chat surface defaulted ON (was default false): pass true as the
+    # SharedPreferences default so a fresh install lands on the Hermes-style chat view
+    # whenever the chat surface is available (v55). User toggle still overrides via prefs.
+    const/4 v2, 0x1
+
+    invoke-interface {v4, v0, v2}, Landroid/content/SharedPreferences;->getBoolean(Ljava/lang/String;Z)Z
 
     move-result v0
 

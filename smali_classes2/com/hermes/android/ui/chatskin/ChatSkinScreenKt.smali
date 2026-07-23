@@ -260,7 +260,8 @@
 .method static constructor <clinit>()V
     .locals 9
 
-    const-wide v0, 0xff2563ebL
+    # Papers Dark: user bubble = muted slate-blue (was bright #2563eb)
+    const-wide v0, 0xff2b4a6fL
 
     .line 64
     invoke-static {v0, v1}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
@@ -269,18 +270,10 @@
 
     sput-wide v0, Lcom/hermes/android/ui/chatskin/ChatSkinScreenKt;->UserBubble:J
 
-    .line 65
-    sget-object v0, Landroidx/compose/ui/graphics/Color;->Companion:Landroidx/compose/ui/graphics/Color$Companion;
-
-    invoke-virtual {v0}, Landroidx/compose/ui/graphics/Color$Companion;->getWhite-0d7_KjU()J
-
-    move-result-wide v1
-
+    # Papers Dark: still allocate registers used later (v7=0xe, v8=0 for copy() calls below)
     const/16 v7, 0xe
 
     const/4 v8, 0x0
-
-    const v3, 0x3df5c28f    # 0.12f
 
     const/4 v4, 0x0
 
@@ -288,44 +281,45 @@
 
     const/4 v6, 0x0
 
-    invoke-static/range {v1 .. v8}, Landroidx/compose/ui/graphics/Color;->copy-wmQWz5c$default(JFFFFILjava/lang/Object;)J
+    # AssistantBubble = solid Papers dark card #111124
+    const-wide v0, 0xff111124L
+
+    invoke-static {v0, v1}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
 
     move-result-wide v0
 
     sput-wide v0, Lcom/hermes/android/ui/chatskin/ChatSkinScreenKt;->AssistantBubble:J
 
     .line 66
-    sget-object v0, Landroidx/compose/ui/graphics/Color;->Companion:Landroidx/compose/ui/graphics/Color$Companion;
+    # ToolCard = slightly lifted Papers dark card #161a2e
+    const-wide v0, 0xff161a2eL
 
-    invoke-virtual {v0}, Landroidx/compose/ui/graphics/Color$Companion;->getWhite-0d7_KjU()J
-
-    move-result-wide v1
-
-    const v3, 0x3da3d70a    # 0.08f
-
-    invoke-static/range {v1 .. v8}, Landroidx/compose/ui/graphics/Color;->copy-wmQWz5c$default(JFFFFILjava/lang/Object;)J
+    invoke-static {v0, v1}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
 
     move-result-wide v0
 
     sput-wide v0, Lcom/hermes/android/ui/chatskin/ChatSkinScreenKt;->ToolCard:J
 
+    # Papers Dark: base ink = warm off-white #f3f0e8 (replaces pure white).
+    # TextPrimary = solid off-white
     .line 67
-    sget-object v0, Landroidx/compose/ui/graphics/Color;->Companion:Landroidx/compose/ui/graphics/Color$Companion;
+    const-wide v0, 0xfff3f0e8L
 
-    invoke-virtual {v0}, Landroidx/compose/ui/graphics/Color$Companion;->getWhite-0d7_KjU()J
+    invoke-static {v0, v1}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
 
     move-result-wide v0
 
     sput-wide v0, Lcom/hermes/android/ui/chatskin/ChatSkinScreenKt;->TextPrimary:J
 
+    # TextSecondary = off-white @ 0.78
     .line 68
-    sget-object v0, Landroidx/compose/ui/graphics/Color;->Companion:Landroidx/compose/ui/graphics/Color$Companion;
+    const-wide v1, 0xfff3f0e8L
 
-    invoke-virtual {v0}, Landroidx/compose/ui/graphics/Color$Companion;->getWhite-0d7_KjU()J
+    invoke-static {v1, v2}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
 
     move-result-wide v1
 
-    const v3, 0x3f333333    # 0.7f
+    const v3, 0x3f47ae14    # 0.78f
 
     invoke-static/range {v1 .. v8}, Landroidx/compose/ui/graphics/Color;->copy-wmQWz5c$default(JFFFFILjava/lang/Object;)J
 
@@ -333,14 +327,15 @@
 
     sput-wide v0, Lcom/hermes/android/ui/chatskin/ChatSkinScreenKt;->TextSecondary:J
 
+    # TextMuted = off-white @ 0.55
     .line 69
-    sget-object v0, Landroidx/compose/ui/graphics/Color;->Companion:Landroidx/compose/ui/graphics/Color$Companion;
+    const-wide v1, 0xfff3f0e8L
 
-    invoke-virtual {v0}, Landroidx/compose/ui/graphics/Color$Companion;->getWhite-0d7_KjU()J
+    invoke-static {v1, v2}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
 
     move-result-wide v1
 
-    const/high16 v3, 0x3f000000    # 0.5f
+    const v3, 0x3f0ccccd    # ~0.55f
 
     invoke-static/range {v1 .. v8}, Landroidx/compose/ui/graphics/Color;->copy-wmQWz5c$default(JFFFFILjava/lang/Object;)J
 
@@ -348,14 +343,15 @@
 
     sput-wide v0, Lcom/hermes/android/ui/chatskin/ChatSkinScreenKt;->TextMuted:J
 
+    # Border = off-white @ 0.15 (quiet line)
     .line 70
-    sget-object v0, Landroidx/compose/ui/graphics/Color;->Companion:Landroidx/compose/ui/graphics/Color$Companion;
+    const-wide v1, 0xfff3f0e8L
 
-    invoke-virtual {v0}, Landroidx/compose/ui/graphics/Color$Companion;->getWhite-0d7_KjU()J
+    invoke-static {v1, v2}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
 
     move-result-wide v1
 
-    const v3, 0x3e4ccccd    # 0.2f
+    const v3, 0x3e19999a    # 0.15f
 
     invoke-static/range {v1 .. v8}, Landroidx/compose/ui/graphics/Color;->copy-wmQWz5c$default(JFFFFILjava/lang/Object;)J
 
@@ -5703,7 +5699,8 @@
 
     move-result-object v7
 
-    const-wide v4, 0xff1e2536L
+    # Papers Dark canvas #0a0a18 (was blue #1e2536)
+    const-wide v4, 0xff0a0a18L
 
     .line 230
     invoke-static {v4, v5}, Landroidx/compose/ui/graphics/ColorKt;->Color(J)J
