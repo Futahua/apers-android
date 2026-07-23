@@ -449,6 +449,11 @@ body.apers-android-host,
     font-size: 13px;
   }
 
+  .apers-android-host .app-titlebar-icon,
+  .apers-android-host .assistant-turn > .msg-role.assistant {
+    display: none !important;
+  }
+
   .apers-android-host .messages-inner {
     padding-left: 14px;
     padding-right: 14px;
