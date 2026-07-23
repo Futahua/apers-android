@@ -109,7 +109,7 @@
 
     check-cast v0, Ljava/lang/CharSequence;
 
-    const-string v1, "python -m handoff.mesh_broker"
+    const-string v1, "Looking for your computer on this Wi-Fi …"
 
     check-cast v1, Ljava/lang/CharSequence;
 
@@ -457,7 +457,7 @@
     const v25, 0x1ffb0
 
     .line 2184
-    const-string v1, "python -m handoff.mesh_broker"
+    const-string v1, "Looking for your computer on this Wi-Fi …"
 
     const/4 v7, 0x0
 

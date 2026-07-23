@@ -427,6 +427,10 @@
 
     move-result-object v2
 
+    invoke-static {v2}, Lcom/hermes/android/handoff/AutoPair;->displayHost(Ljava/lang/String;)Ljava/lang/String;
+
+    move-result-object v2
+
     filled-new-array {v2}, [Ljava/lang/Object;
 
     move-result-object v2

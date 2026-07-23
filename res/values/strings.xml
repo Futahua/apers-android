@@ -367,7 +367,7 @@ Make sure LiteRT-LM server is running before launching Hermes."</string>
     <string name="mesh_connected_ok">Connected ✓</string>
     <string name="mesh_connected_to">Connected %1$s</string>
     <string name="mesh_connecting">Connecting…</string>
-    <string name="mesh_copied">Command copied</string>
+    <string name="mesh_copied">Copied</string>
     <string name="mesh_copy">Copy</string>
     <string name="mesh_dispatch_btn">Send</string>
     <string name="mesh_dispatch_fail">Dispatch failed: %1$s</string>
@@ -393,11 +393,11 @@ Make sure LiteRT-LM server is running before launching Hermes."</string>
     <string name="mesh_offline">● Offline</string>
     <string name="mesh_online">● Online</string>
     <string name="mesh_paircode_label">Pairing code (QR content)</string>
-    <string name="mesh_prereq">Requires the Hermes companion running on your computer.</string>
+    <string name="mesh_prereq">Works whenever Papers is running on your computer — connects by itself on the same Wi-Fi.</string>
     <string name="mesh_running">Running…</string>
     <string name="mesh_scan_qr">Scan QR</string>
-    <string name="mesh_step1">"1. Paste and run this in your computer's terminal:"</string>
-    <string name="mesh_step2">2. Scan the QR shown on your computer, or paste the pairing code:</string>
+    <string name="mesh_step1">1. Open Papers on your computer — the phone connector starts with it. No terminal needed.</string>
+    <string name="mesh_step2">2. Stay on the same Wi-Fi — your phone connects by itself. (Backup: scan the QR or paste the pairing code from the connector.)</string>
     <string name="mesh_tasks">Tasks</string>
     <string name="mesh_title">Run on Computer</string>
     <string name="moa_council_empty_no_providers">Set up at least one AI provider first — a council is built from your configured providers.</string>

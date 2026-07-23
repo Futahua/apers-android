@@ -295,7 +295,7 @@
 
 .field private static final GlassBorder:J
 
-.field private static final MESH_BROKER_CMD:Ljava/lang/String; = "python -m handoff.mesh_broker"
+.field private static final MESH_BROKER_CMD:Ljava/lang/String; = "Looking for your computer on this Wi-Fi …"
 
 .field private static final TERMINAL_MODAL_MARKERS:Ljava/util/List;
     .annotation system Ldalvik/annotation/Signature;
