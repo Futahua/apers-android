@@ -3,7 +3,7 @@
 .source "D8$$SyntheticClass"
 
 # interfaces
-.implements Ljava/lang/Runnable;
+.implements Landroid/view/View$OnClickListener;
 
 
 # instance fields
@@ -24,13 +24,13 @@
 
 
 # virtual methods
-.method public final run()V
+.method public final onClick(Landroid/view/View;)V
     .locals 1
 
     .line 0
     iget-object v0, p0, Lcom/hermes/android/webui/ChatWebActivity$$ExternalSyntheticLambda5;->f$0:Lcom/hermes/android/webui/ChatWebActivity;
 
-    invoke-static {v0}, Lcom/hermes/android/webui/ChatWebActivity;->$r8$lambda$SSw4syM_YU7LJXrlkuKaGJgeimo(Lcom/hermes/android/webui/ChatWebActivity;)V
+    invoke-static {v0, p1}, Lcom/hermes/android/webui/ChatWebActivity;->$r8$lambda$syr_jx17WEBf_vEgars1U6caLk4(Lcom/hermes/android/webui/ChatWebActivity;Landroid/view/View;)V
 
     return-void
 .end method

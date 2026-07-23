@@ -247,6 +247,18 @@
     check-cast v4, Lcom/hermes/android/mesh/MeshClient$Result;
 
     .line 35
+    invoke-virtual {v4}, Lcom/hermes/android/mesh/MeshClient$Result;->getText()Ljava/lang/String;
+
+    move-result-object v5
+
+    const-string v6, "__APERS_CHAT_RESULT_V1__:"
+
+    invoke-virtual {v5, v6}, Ljava/lang/String;->startsWith(Ljava/lang/String;)Z
+
+    move-result v5
+
+    if-nez v5, :goto_0
+
     sget-object v5, Lcom/hermes/android/mesh/MeshNotifier;->INSTANCE:Lcom/hermes/android/mesh/MeshNotifier;
 
     invoke-virtual {v3}, Lcom/hermes/android/mesh/MeshPollWorker;->getApplicationContext()Landroid/content/Context;
@@ -300,6 +312,18 @@
     check-cast v2, Lcom/hermes/android/mesh/MeshClient$Result;
 
     .line 36
+    invoke-virtual {v2}, Lcom/hermes/android/mesh/MeshClient$Result;->getText()Ljava/lang/String;
+
+    move-result-object v3
+
+    const-string v4, "__APERS_CHAT_RESULT_V1__:"
+
+    invoke-virtual {v3, v4}, Ljava/lang/String;->startsWith(Ljava/lang/String;)Z
+
+    move-result v3
+
+    if-nez v3, :goto_1
+
     invoke-virtual {v2}, Lcom/hermes/android/mesh/MeshClient$Result;->getId()Ljava/lang/String;
 
     move-result-object v2

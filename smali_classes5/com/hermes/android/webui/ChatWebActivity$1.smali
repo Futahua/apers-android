@@ -30,7 +30,7 @@
         }
     .end annotation
 
-    .line 91
+    .line 104
     iput-object p1, p0, Lcom/hermes/android/webui/ChatWebActivity$1;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
 
     invoke-direct {p0}, Landroid/webkit/WebViewClient;-><init>()V
@@ -43,7 +43,7 @@
 .method public onPageFinished(Landroid/webkit/WebView;Ljava/lang/String;)V
     .locals 2
 
-    .line 109
+    .line 122
     iget-object p1, p0, Lcom/hermes/android/webui/ChatWebActivity$1;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
 
     invoke-static {p1}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$fgetchatLoaded(Lcom/hermes/android/webui/ChatWebActivity;)Z
@@ -70,14 +70,14 @@
 
     if-eqz p1, :cond_0
 
-    .line 110
+    .line 123
     iget-object p1, p0, Lcom/hermes/android/webui/ChatWebActivity$1;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
 
     const/4 p2, 0x1
 
     invoke-static {p1, p2}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$fputchatLoaded(Lcom/hermes/android/webui/ChatWebActivity;Z)V
 
-    .line 111
+    .line 124
     iget-object p1, p0, Lcom/hermes/android/webui/ChatWebActivity$1;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
 
     invoke-static {p1}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$mhideSplash(Lcom/hermes/android/webui/ChatWebActivity;)V
@@ -89,21 +89,21 @@
 .method public onReceivedError(Landroid/webkit/WebView;Landroid/webkit/WebResourceRequest;Landroid/webkit/WebResourceError;)V
     .locals 0
 
-    .line 117
+    .line 130
     invoke-interface {p2}, Landroid/webkit/WebResourceRequest;->isForMainFrame()Z
 
     move-result p1
 
     if-eqz p1, :cond_0
 
-    .line 118
+    .line 131
     iget-object p1, p0, Lcom/hermes/android/webui/ChatWebActivity$1;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
 
     const/4 p2, 0x0
 
     invoke-static {p1, p2}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$fputchatLoaded(Lcom/hermes/android/webui/ChatWebActivity;Z)V
 
-    .line 119
+    .line 132
     iget-object p1, p0, Lcom/hermes/android/webui/ChatWebActivity$1;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
 
     const-string p2, "Chat server connection lost."
@@ -119,19 +119,19 @@
 .method public shouldOverrideUrlLoading(Landroid/webkit/WebView;Landroid/webkit/WebResourceRequest;)Z
     .locals 2
 
-    .line 94
+    .line 107
     invoke-interface {p2}, Landroid/webkit/WebResourceRequest;->getUrl()Landroid/net/Uri;
 
     move-result-object p1
 
-    .line 95
+    .line 108
     invoke-virtual {p1}, Landroid/net/Uri;->getHost()Ljava/lang/String;
 
     move-result-object p2
 
     if-eqz p2, :cond_1
 
-    .line 96
+    .line 109
     const-string v0, "127.0.0.1"
 
     invoke-virtual {p2, v0}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
@@ -153,7 +153,7 @@
 
     return p1
 
-    .line 100
+    .line 113
     :cond_1
     :try_start_0
     iget-object p2, p0, Lcom/hermes/android/webui/ChatWebActivity$1;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
@@ -170,7 +170,7 @@
 
     goto :goto_0
 
-    .line 102
+    .line 115
     :catch_0
     invoke-static {p1}, Ljava/lang/String;->valueOf(Ljava/lang/Object;)Ljava/lang/String;
 

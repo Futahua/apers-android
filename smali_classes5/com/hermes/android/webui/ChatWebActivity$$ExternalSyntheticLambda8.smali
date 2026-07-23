@@ -1,4 +1,4 @@
-.class public final synthetic Lcom/hermes/android/webui/ChatWebActivity$$ExternalSyntheticLambda1;
+.class public final synthetic Lcom/hermes/android/webui/ChatWebActivity$$ExternalSyntheticLambda8;
 .super Ljava/lang/Object;
 .source "D8$$SyntheticClass"
 
@@ -17,7 +17,7 @@
     .line 0
     invoke-direct {p0}, Ljava/lang/Object;-><init>()V
 
-    iput-object p1, p0, Lcom/hermes/android/webui/ChatWebActivity$$ExternalSyntheticLambda1;->f$0:Lcom/hermes/android/webui/ChatWebActivity;
+    iput-object p1, p0, Lcom/hermes/android/webui/ChatWebActivity$$ExternalSyntheticLambda8;->f$0:Lcom/hermes/android/webui/ChatWebActivity;
 
     return-void
 .end method
@@ -28,9 +28,9 @@
     .locals 1
 
     .line 0
-    iget-object v0, p0, Lcom/hermes/android/webui/ChatWebActivity$$ExternalSyntheticLambda1;->f$0:Lcom/hermes/android/webui/ChatWebActivity;
+    iget-object v0, p0, Lcom/hermes/android/webui/ChatWebActivity$$ExternalSyntheticLambda8;->f$0:Lcom/hermes/android/webui/ChatWebActivity;
 
-    invoke-static {v0}, Lcom/hermes/android/webui/ChatWebActivity;->$r8$lambda$_Y0AqZx99mxxoHXXTcESExFLKoA(Lcom/hermes/android/webui/ChatWebActivity;)V
+    invoke-static {v0}, Lcom/hermes/android/webui/ChatWebActivity;->$r8$lambda$P2CGC24tXbG9CuKzOsJvG2Rc0n4(Lcom/hermes/android/webui/ChatWebActivity;)V
 
     return-void
 .end method

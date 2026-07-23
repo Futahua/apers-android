@@ -1,0 +1,269 @@
+/*
+ * Android host treatment for the existing Hermes WebUI.
+ * This preserves every WebUI panel and behavior; it only applies the desktop
+ * product's restrained warm-light visual language and adds the two requested
+ * destinations (Desktop and Original).
+ */
+
+html.apers-android-host,
+body.apers-android-host {
+  color-scheme: light;
+  --bg: #f8f7f3;
+  --sidebar: #f0eee8;
+  --surface: #ffffff;
+  --surface-subtle: #f6f4ef;
+  --surface-subtle-hover: #ece9e2;
+  --main-bg: #f8f7f3;
+  --topbar-bg: rgba(248, 247, 243, .96);
+  --input-bg: #fbfaf7;
+  --hover-bg: rgba(35, 33, 29, .055);
+  --border: #d9d6ce;
+  --border2: #c7c3ba;
+  --border-subtle: #e4e1da;
+  --border-muted: #cfcbc2;
+  --text: #292823;
+  --strong: #171713;
+  --muted: #75716a;
+  --em: #504d47;
+  --accent: #c97865;
+  --accent-hover: #b96856;
+  --accent-bg: rgba(201, 120, 101, .1);
+  --accent-bg-strong: rgba(201, 120, 101, .18);
+  --accent-text: #a85645;
+  --focus-ring: rgba(201, 120, 101, .24);
+  --focus-glow: rgba(201, 120, 101, .08);
+  --blue: #397b78;
+  --gold: #9a7247;
+  --code-bg: #efede7;
+  --code-inline-bg: rgba(35, 33, 29, .065);
+  --code-text: #725440;
+  --pre-text: #292823;
+  --user-bubble-bg: #eeece6;
+  --user-bubble-border: #dcd8cf;
+  --user-bubble-text: #292823;
+  --user-bubble-placeholder: #75716a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+}
+
+body.apers-android-host,
+.apers-android-host .main {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.apers-android-host .app-titlebar,
+.apers-android-host .rail,
+.apers-android-host .sidebar,
+.apers-android-host .topbar,
+.apers-android-host .composer-wrap {
+  background: var(--sidebar);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.apers-android-host .session-item.active,
+.apers-android-host .nav-tab.active,
+.apers-android-host .rail-btn.active,
+.apers-android-host [data-apers-destination="desktop"].is-active {
+  background: rgba(35, 33, 29, .08);
+  color: var(--text);
+}
+
+.apers-android-host .composer-box {
+  background: #fff;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(30, 27, 22, .04);
+}
+
+.apers-computer-target {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--border2);
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 11px;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 9px;
+}
+
+.apers-computer-target:hover,
+.apers-computer-target[aria-pressed="true"] {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+
+.apers-computer-target-dot {
+  background: var(--muted);
+  border-radius: 50%;
+  height: 7px;
+  width: 7px;
+}
+
+.apers-computer-target.is-linked .apers-computer-target-dot,
+.apers-sidebar-destination.is-linked:first-child svg {
+  color: #397b78;
+}
+
+.apers-computer-target.is-linked .apers-computer-target-dot {
+  background: #397b78;
+  box-shadow: 0 0 0 3px rgba(57, 123, 120, .12);
+}
+
+.apers-computer-target.is-offline .apers-computer-target-dot {
+  background: #b9894f;
+}
+
+.apers-computer-target.is-running .apers-computer-target-dot {
+  animation: apers-computer-pulse 1.1s ease-in-out infinite;
+  background: var(--accent);
+}
+
+@keyframes apers-computer-pulse {
+  50% { opacity: .35; transform: scale(.78); }
+}
+
+.apers-sidebar-destinations {
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+}
+
+.apers-sidebar-destination {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: var(--text);
+  display: flex;
+  font: inherit;
+  gap: 10px;
+  min-height: 46px;
+  padding: 7px 9px;
+  text-align: left;
+  width: 100%;
+}
+
+.apers-sidebar-destination:hover,
+.apers-sidebar-destination:focus-visible {
+  background: var(--hover-bg);
+  outline: none;
+}
+
+.apers-sidebar-destination svg {
+  flex: 0 0 auto;
+  height: 18px;
+  width: 18px;
+}
+
+.apers-sidebar-destination span {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.apers-sidebar-destination strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.apers-sidebar-destination small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+@media (max-width: 640px) {
+  .apers-android-host .sidebar {
+    bottom: 0;
+    box-shadow: 14px 0 38px rgba(36, 32, 25, .16);
+    max-width: 330px;
+    width: min(88vw, 330px);
+  }
+
+  .apers-android-host .mobile-overlay.visible {
+    display: block;
+    background: transparent;
+    backdrop-filter: none;
+  }
+
+  .apers-android-host .sidebar-nav {
+    background: #ebe8e1;
+    border-color: var(--border);
+  }
+
+  .apers-android-host .sidebar-nav .nav-tab {
+    border-radius: 7px;
+    color: var(--muted);
+  }
+
+  .apers-android-host .sidebar-nav .nav-tab.active {
+    color: var(--text);
+  }
+
+  .apers-android-host .panel-head {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    min-height: 44px;
+    padding: 10px 12px;
+    text-transform: uppercase;
+  }
+
+  .apers-android-host .session-search {
+    padding: 8px 10px;
+  }
+
+  .apers-android-host .session-list {
+    padding: 0 6px 8px;
+  }
+
+  .apers-android-host .session-item {
+    border-radius: 7px;
+    min-height: 40px;
+    padding: 9px 10px;
+  }
+
+  .apers-android-host .app-titlebar {
+    height: 48px;
+    min-height: 48px;
+  }
+
+  .apers-android-host .app-titlebar-title {
+    font-size: 13px;
+  }
+
+  .apers-android-host .messages-inner {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .apers-android-host .composer-wrap {
+    padding: 8px 10px max(10px, env(safe-area-inset-bottom)) !important;
+  }
+
+  .apers-android-host .composer-box {
+    border-radius: 10px;
+  }
+
+  .apers-android-host textarea#msg {
+    font-size: 15px;
+    line-height: 1.5;
+    padding: 10px 12px 4px;
+  }
+
+  .apers-android-host .apers-computer-target {
+    max-width: 138px;
+    min-height: 34px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

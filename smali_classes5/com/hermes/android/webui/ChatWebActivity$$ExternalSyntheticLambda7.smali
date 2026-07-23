@@ -3,7 +3,7 @@
 .source "D8$$SyntheticClass"
 
 # interfaces
-.implements Ljava/lang/Runnable;
+.implements Landroid/webkit/ValueCallback;
 
 
 # instance fields
@@ -24,13 +24,15 @@
 
 
 # virtual methods
-.method public final run()V
+.method public final onReceiveValue(Ljava/lang/Object;)V
     .locals 1
 
     .line 0
     iget-object v0, p0, Lcom/hermes/android/webui/ChatWebActivity$$ExternalSyntheticLambda7;->f$0:Lcom/hermes/android/webui/ChatWebActivity;
 
-    invoke-static {v0}, Lcom/hermes/android/webui/ChatWebActivity;->$r8$lambda$P2CGC24tXbG9CuKzOsJvG2Rc0n4(Lcom/hermes/android/webui/ChatWebActivity;)V
+    check-cast p1, Ljava/lang/String;
+
+    invoke-static {v0, p1}, Lcom/hermes/android/webui/ChatWebActivity;->$r8$lambda$ROf2UJ8EGw7td2A2hCwEg8N3clk(Lcom/hermes/android/webui/ChatWebActivity;Ljava/lang/String;)V
 
     return-void
 .end method
