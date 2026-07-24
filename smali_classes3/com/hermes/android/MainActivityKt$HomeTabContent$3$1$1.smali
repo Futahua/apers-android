@@ -59,6 +59,12 @@
 .end annotation
 
 
+# static fields
+# Process-static guard so the background edge auto-install is attempted at most
+# once per process (avoids re-running pip on every home-screen recomposition).
+.field static autoEdgeAttempted:Z
+
+
 # instance fields
 .field final synthetic $bootstrapManager:Lcom/hermes/android/BootstrapManager;
 
@@ -159,7 +165,7 @@
 .end method
 
 .method public final invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;
-    .locals 1
+    .locals 2
 
     invoke-static {}, Lkotlin/coroutines/intrinsics/IntrinsicsKt;->getCOROUTINE_SUSPENDED()Ljava/lang/Object;
 
@@ -174,9 +180,28 @@
 
     invoke-virtual {p1}, Lcom/hermes/android/BootstrapManager;->isEdgeInstalled()Z
 
-    move-result p1
+    move-result v0
 
-    invoke-static {p1}, Lkotlin/coroutines/jvm/internal/Boxing;->boxBoolean(Z)Ljava/lang/Boolean;
+    if-nez v0, :cond_edge_done
+
+    sget-boolean v1, Lcom/hermes/android/MainActivityKt$HomeTabContent$3$1$1;->autoEdgeAttempted:Z
+
+    if-nez v1, :cond_edge_done
+
+    const/4 v1, 0x1
+
+    sput-boolean v1, Lcom/hermes/android/MainActivityKt$HomeTabContent$3$1$1;->autoEdgeAttempted:Z
+
+    iget-object p1, p0, Lcom/hermes/android/MainActivityKt$HomeTabContent$3$1$1;->$bootstrapManager:Lcom/hermes/android/BootstrapManager;
+
+    const/4 v1, 0x0
+
+    invoke-virtual {p1, v1}, Lcom/hermes/android/BootstrapManager;->installEdgeFeatures(Lkotlin/jvm/functions/Function1;)Z
+
+    move-result v0
+
+    :cond_edge_done
+    invoke-static {v0}, Lkotlin/coroutines/jvm/internal/Boxing;->boxBoolean(Z)Ljava/lang/Boolean;
 
     move-result-object p1
 
