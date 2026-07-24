@@ -2455,6 +2455,27 @@
     };
   }
 
+  // Make the composer's primary button show Stop for a running Desktop (PC) turn.
+  // The base getComposerPrimaryAction only returns 'stop' when S.activeStreamId is
+  // set — but a Desktop turn sets S.busy without an activeStreamId until (and
+  // unless) the PC starts emitting tool events, so the Stop button never appeared
+  // for a PC task that was just thinking or running a single process. A Desktop
+  // cancel goes through cancelComputerTask() (companion kill), which needs no
+  // stream id, so it's safe to offer Stop whenever the Desktop turn is busy and
+  // the composer is empty. With draft text, defer to the base action (send).
+  if (typeof window.getComposerPrimaryAction === 'function') {
+    var basePrimaryAction = window.getComposerPrimaryAction;
+    window.getComposerPrimaryAction = function () {
+      if (isDesktopConversation(activeSessionId()) &&
+          typeof S !== 'undefined' && S.busy) {
+        var input = document.getElementById('msg');
+        var hasContent = !!(input && String(input.value || '').trim());
+        if (!hasContent) return 'stop';
+      }
+      return basePrimaryAction.apply(this, arguments);
+    };
+  }
+
   function start() {
     localStorage.removeItem(LEGACY_TARGET_KEY);
     revealAndroidActions();
