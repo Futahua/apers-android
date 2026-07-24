@@ -2445,7 +2445,8 @@
   // cancel the phone's local /api/chat stream, which does nothing for a turn
   // running on the PC. Returning true tells handleComposerPrimaryAction the
   // stop succeeded (no "cancel_failed" toast).
-  if (typeof window.cancelStream === 'function') {
+  function installDesktopCancelStreamWrap() {
+    if (typeof window.cancelStream !== 'function') return;
     var phoneCancelStream = window.cancelStream;
     window.cancelStream = function () {
       if (isDesktopConversation(activeSessionId())) {
@@ -2454,6 +2455,9 @@
       return phoneCancelStream.apply(this, arguments);
     };
   }
+  // Install on DOMContentLoaded: cancelStream is defined in boot.js, which loads after this file.
+  if (document.readyState === 'complete') installDesktopCancelStreamWrap();
+  else document.addEventListener('DOMContentLoaded', installDesktopCancelStreamWrap, { once: true });
 
   // Make the composer's primary button show Stop for a running Desktop (PC) turn.
   // The base getComposerPrimaryAction only returns 'stop' when S.activeStreamId is
