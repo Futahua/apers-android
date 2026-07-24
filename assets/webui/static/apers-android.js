@@ -75,6 +75,8 @@
   var suppressSessionClickUntil = 0;
   var pickerOpen = false;
   var pickerHistory = false;
+  var pendingBusyAction = null;
+  var busyPickerBuilt = false;
 
   function bridge() {
     var candidate = window.ApersAndroid;
@@ -2436,6 +2438,28 @@
     var phoneSend = window.send;
     window.send = function () {
       if (isDesktopConversation(activeSessionId())) return sendComputerMessage();
+      if (pendingBusyAction && typeof S !== 'undefined' && S.busy) {
+        var input = document.getElementById('msg');
+        var draft = input ? String(input.value || '').trim() : '';
+        if (draft) {
+          var action = pendingBusyAction;
+          if (action === 'steer' && !S.activeStreamId) action = 'queue';
+          var fnName = action === 'queue' ? 'cmdQueue'
+            : action === 'steer' ? 'cmdSteer'
+            : action === 'interrupt' ? 'cmdInterrupt' : null;
+          pendingBusyAction = null;
+          clearBusyActionChip();
+          input.value = '';
+          if (typeof autoResize === 'function') autoResize();
+          if (typeof updateSendBtn === 'function') updateSendBtn();
+          if (fnName && typeof window[fnName] === 'function') {
+            return window[fnName](draft);
+          }
+          input.value = draft;
+          if (typeof autoResize === 'function') autoResize();
+          if (typeof updateSendBtn === 'function') updateSendBtn();
+        }
+      }
       return phoneSend.apply(this, arguments);
     };
   }
@@ -2476,13 +2500,177 @@
         var hasContent = !!(input && String(input.value || '').trim());
         if (!hasContent) return 'stop';
       }
+      if (pendingBusyAction && typeof S !== 'undefined' && S.busy &&
+          !isDesktopConversation(activeSessionId())) {
+        var pi = document.getElementById('msg');
+        if (pi && String(pi.value || '').trim()) {
+          var eff = (pendingBusyAction === 'steer' && !S.activeStreamId) ? 'queue' : pendingBusyAction;
+          return eff;
+        }
+      }
       return basePrimaryAction.apply(this, arguments);
     };
+  }
+
+  // ── Mobile busy-mode picker (Queue / Steer / Interrupt) ──────────────────
+  // Android-host only. While a phone (non-Desktop) turn is running and the
+  // composer has a draft, a picker button next to #btnSend lets the user pick
+  // the per-message busy action without typing a slash and without changing
+  // the global _defaultMessageMode. The choice is held in pendingBusyAction,
+  // shown on #btnSend via the getComposerPrimaryAction wrap above, shown as a
+  // "Next:" chip, and consumed by the send() wrap above (cmdQueue/cmdSteer/
+  // cmdInterrupt). Desktop turns use Stop, not this picker.
+  var BUSY_ACTION_ICONS = {
+    queue: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 5H3"/><path d="M16 12H3"/><path d="M9 19H3"/><path d="m16 16-3 3 3 3"/><path d="M21 5v12a2 2 0 0 1-2 2h-6"/></svg>',
+    steer: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"/></svg>',
+    interrupt: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4v16"/><path d="M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z"/></svg>'
+  };
+  var BUSY_ACTION_LABELS = { queue: 'Queue', steer: 'Steer', interrupt: 'Interrupt' };
+
+  function pickerHostReady() {
+    return document.documentElement.classList.contains('apers-android-host');
+  }
+
+  function pickerEnabledForCurrent() {
+    if (!pickerHostReady()) return false;
+    if (typeof S === 'undefined' || !S.busy) return false;
+    if (isDesktopConversation(activeSessionId())) return false;
+    var input = document.getElementById('msg');
+    if (!input || !String(input.value || '').trim()) return false;
+    return true;
+  }
+
+  function clearBusyActionChip() {
+    var chip = document.getElementById('apersBusyActionChip');
+    if (chip) chip.hidden = true;
+    if (typeof updateSendBtn === 'function') updateSendBtn();
+  }
+
+  function setPendingBusyAction(action) {
+    pendingBusyAction = action;
+    var chip = document.getElementById('apersBusyActionChip');
+    if (chip) {
+      var label = document.getElementById('apersBusyActionChipLabel');
+      if (label) label.textContent = BUSY_ACTION_LABELS[action] || action;
+      chip.hidden = false;
+    }
+    if (typeof updateSendBtn === 'function') updateSendBtn();
+  }
+
+  function closeBusyActionPicker() {
+    var panel = document.getElementById('apersBusyPickerPanel');
+    if (panel) panel.classList.remove('open');
+  }
+
+  function openBusyActionPicker() {
+    var panel = document.getElementById('apersBusyPickerPanel');
+    if (!panel) return;
+    var cur = pendingBusyAction || window._defaultMessageMode || 'steer';
+    panel.querySelectorAll('.apers-busy-picker-item').forEach(function (item) {
+      item.classList.toggle('selected', item.dataset.busyAction === cur);
+      var dis = item.dataset.busyAction === 'steer' &&
+        (typeof S === 'undefined' || !S.activeStreamId);
+      item.classList.toggle('disabled', !!dis);
+      item.setAttribute('aria-disabled', dis ? 'true' : 'false');
+    });
+    panel.classList.add('open');
+  }
+
+  function updateBusyPickerVisibility() {
+    var btn = document.getElementById('apersBusyPickerBtn');
+    if (!btn) return;
+    var enabled = pickerEnabledForCurrent();
+    btn.hidden = !enabled;
+    if (!enabled) {
+      closeBusyActionPicker();
+      if (pendingBusyAction) {
+        pendingBusyAction = null;
+        clearBusyActionChip();
+      }
+    }
+  }
+
+  function buildBusyActionPicker() {
+    if (busyPickerBuilt) return;
+    if (!pickerHostReady()) return;
+    var composerBox = document.getElementById('composerBox');
+    var btnSend = document.getElementById('btnSend');
+    if (!composerBox || !btnSend || document.getElementById('apersBusyPickerBtn')) return;
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'apersBusyPickerBtn';
+    btn.className = 'apers-busy-picker-btn';
+    btn.hidden = true;
+    btn.setAttribute('aria-label', 'Choose send action');
+    btn.setAttribute('aria-haspopup', 'menu');
+    btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>';
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var panel = document.getElementById('apersBusyPickerPanel');
+      if (panel && panel.classList.contains('open')) closeBusyActionPicker();
+      else openBusyActionPicker();
+    });
+    btnSend.parentNode.insertBefore(btn, btnSend);
+
+    var panel = document.createElement('div');
+    panel.id = 'apersBusyPickerPanel';
+    panel.className = 'apers-busy-picker-panel';
+    panel.setAttribute('role', 'menu');
+    ['queue', 'steer', 'interrupt'].forEach(function (action) {
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'apers-busy-picker-item apers-busy-' + action;
+      item.dataset.busyAction = action;
+      item.setAttribute('role', 'menuitem');
+      item.innerHTML = '<span class="apers-busy-picker-icon">' + (BUSY_ACTION_ICONS[action] || '') +
+        '</span><span class="apers-busy-picker-text">' + (BUSY_ACTION_LABELS[action] || action) + '</span>';
+      item.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (item.classList.contains('disabled')) return;
+        setPendingBusyAction(action);
+        closeBusyActionPicker();
+      });
+      panel.appendChild(item);
+    });
+    composerBox.appendChild(panel);
+
+    var chip = document.createElement('div');
+    chip.id = 'apersBusyActionChip';
+    chip.className = 'apers-busy-action-chip';
+    chip.hidden = true;
+    chip.innerHTML = '<span class="apers-busy-action-chip-next">Next:</span> ' +
+      '<span id="apersBusyActionChipLabel">Steer</span>' +
+      '<button type="button" id="apersBusyActionChipClear" class="apers-busy-action-chip-clear" aria-label="Clear action">\u00d7</button>';
+    composerBox.insertBefore(chip, composerBox.firstChild);
+    var clearBtn = document.getElementById('apersBusyActionChipClear');
+    if (clearBtn) clearBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      pendingBusyAction = null;
+      clearBusyActionChip();
+    });
+
+    document.addEventListener('click', function (e) {
+      var p = document.getElementById('apersBusyPickerPanel');
+      var b = document.getElementById('apersBusyPickerBtn');
+      if (!p || !p.classList.contains('open')) return;
+      if (p.contains(e.target) || (b && b.contains(e.target))) return;
+      closeBusyActionPicker();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeBusyActionPicker();
+    });
+
+    var msg = document.getElementById('msg');
+    if (msg) msg.addEventListener('input', updateBusyPickerVisibility);
+
+    busyPickerBuilt = true;
   }
 
   function start() {
     localStorage.removeItem(LEGACY_TARGET_KEY);
     revealAndroidActions();
+    buildBusyActionPicker();
     installUnifiedSidebar();
     installHermesEmptyState();
     installDrawerBackdrop();
@@ -2506,6 +2694,7 @@
         lastActiveSessionId = current;
       }
       updateTargetUi();
+      updateBusyPickerVisibility();
       var binding = activeBinding();
       var normalPending = Object.keys(pending).some(function (id) {
         return pending[id] && !pending[id].kind;

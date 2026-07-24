@@ -865,3 +865,109 @@ button.apers-sidebar-state-retry:active {
   color: var(--text);
   border: 1px solid var(--border);
 }
+
+/* ── Mobile busy-mode picker (Queue / Steer / Interrupt) ─────────────────── */
+.apers-android-host .apers-busy-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-right: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--input-bg, var(--sidebar));
+  color: var(--text-soft, var(--text));
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.apers-android-host .apers-busy-picker-btn[hidden] { display: none; }
+.apers-android-host .apers-busy-picker-btn:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent-text);
+  color: var(--accent-text);
+}
+
+.apers-android-host .apers-busy-picker-panel {
+  display: none;
+  position: absolute;
+  right: 6px;
+  bottom: calc(100% + 8px);
+  z-index: 190;
+  flex-direction: column;
+  min-width: 168px;
+  padding: 6px;
+  gap: 2px;
+  background: var(--sidebar);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .28);
+}
+.apers-android-host .apers-busy-picker-panel.open { display: flex; }
+
+.apers-android-host .apers-busy-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.apers-android-host .apers-busy-picker-item:hover { background: var(--accent-bg); }
+.apers-android-host .apers-busy-picker-item.selected {
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.apers-android-host .apers-busy-picker-item.disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.apers-android-host .apers-busy-picker-item.disabled:hover { background: transparent; }
+.apers-android-host .apers-busy-picker-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.apers-android-host .apers-busy-picker-item.apers-busy-steer .apers-busy-picker-icon { color: var(--purple, #8b5cf6); }
+.apers-android-host .apers-busy-picker-item.apers-busy-interrupt .apers-busy-picker-icon { color: var(--error); }
+.apers-android-host .apers-busy-picker-item.apers-busy-queue .apers-busy-picker-icon { color: var(--accent-text); }
+
+.apers-android-host .apers-busy-action-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px 0;
+  padding: 4px 8px 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-text);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-text);
+  border-radius: 999px;
+  align-self: flex-start;
+  max-width: max-content;
+}
+.apers-android-host .apers-busy-action-chip[hidden] { display: none; }
+.apers-android-host .apers-busy-action-chip-next { opacity: .8; font-weight: 500; }
+.apers-android-host .apers-busy-action-chip-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.apers-android-host .apers-busy-action-chip-clear:hover { background: var(--error); color: #fff; }
