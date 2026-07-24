@@ -12,6 +12,8 @@
   var DESKTOP_PROJECT_ORDER_KEY = 'apers-desktop-project-order-v1';
   var PHONE_PROJECT_COLLAPSED_KEY = 'apers-phone-project-collapsed-v1';
   var DESKTOP_PROJECT_COLLAPSED_KEY = 'apers-desktop-project-collapsed-v1';
+  var PC_NAMES_KEY = 'apers-pc-names-v1';
+  var PC_LASTSEEN_KEY = 'apers-pc-lastseen-v1';
   var RESULT_PREFIX = '__APERS_CHAT_RESULT_V1__:';
   var PROGRESS_PREFIX = '__APERS_PROGRESS_V1__\n';
   var CONTROL_LIST_ID = '__desktop_sessions__';
@@ -85,6 +87,62 @@
   var pollStartedAt = 0;
   var desktopListQueue = [];
   var offlinePeers = {};
+  var offlineRetry = {};
+  var pcNames = readJson(PC_NAMES_KEY, {});
+  var pcLastSeen = readJson(PC_LASTSEEN_KEY, {});
+  var pcLastSeenSavedAt = 0;
+  var pairCallback = null;
+  var discoverCallback = null;
+  var unpairCallback = null;
+
+  function markPeerSeen(deviceId) {
+    if (!deviceId) return;
+    pcLastSeen[deviceId] = Date.now();
+    if (Date.now() - pcLastSeenSavedAt > 30000) {
+      pcLastSeenSavedAt = Date.now();
+      writeJson(PC_LASTSEEN_KEY, pcLastSeen);
+    }
+  }
+
+  function setPeerName(deviceId, name) {
+    if (!deviceId) return;
+    name = String(name || '').trim();
+    if (name) pcNames[deviceId] = name;
+    else delete pcNames[deviceId];
+    writeJson(PC_NAMES_KEY, pcNames);
+  }
+
+  function formatLastSeen(deviceId) {
+    var ts = pcLastSeen[deviceId];
+    if (!ts) return 'never seen';
+    var mins = Math.floor((Date.now() - ts) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return mins + 'm ago';
+    var hours = Math.floor(mins / 60);
+    if (hours < 24) return hours + 'h ago';
+    return Math.floor(hours / 24) + 'd ago';
+  }
+
+
+  // `authored` marks copy we wrote ourselves (it already names the PC and reads
+  // cleanly); without it the fail-closed branch below would replace our own
+  // wording with the generic fallback. Native/broker strings never set it.
+  function friendlyBrokerError(text, deviceId, authored) {
+    var raw = String(text || '');
+    if (authored) return raw;
+    if (/state\.db not found/i.test(raw)) {
+      return (deviceId ? peerLabel(deviceId) : 'This computer') +
+        ' has no Desktop sessions yet.';
+    }
+    if (/ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ECONNRESET|EPIPE|ETIMEDOUT|timed? ?out|unreachable|no reachable host|no route to host|failed to connect|connection (refused|reset|abort|closed)|socket (closed|is closed)|software caused connection abort|broken pipe/i.test(raw)) {
+      return (deviceId ? peerLabel(deviceId) : 'The computer') + ' is unreachable.';
+    }
+    // Anything left is a raw native/broker string (stack text, socket internals,
+    // absolute paths). Never surface it as user copy — the details expander and
+    // logcat remain the debugging path.
+    return (deviceId ? peerLabel(deviceId) : 'The computer') +
+      " couldn't be reached. Tap refresh to try again.";
+  }
 
   function peerId(peer) { return peer && String(peer.deviceId || '') || ''; }
 
@@ -93,10 +151,18 @@
   }
 
   function peerLabel(deviceId) {
+    if (deviceId && pcNames[deviceId]) return pcNames[deviceId];
     var peer = computerPeers.find(function (item) { return peerId(item) === deviceId; });
-    if (!peer) return deviceId || 'Computer';
+    if (!peer) return deviceId ? deviceId.slice(0, 10) : 'Computer';
     var shortId = deviceId.length > 10 ? deviceId.slice(0, 10) : deviceId;
     return String(peer.host || 'Computer') + ' · ' + shortId;
+  }
+
+  function peerDetail(deviceId) {
+    var peer = computerPeers.find(function (item) { return peerId(item) === deviceId; });
+    var host = peer ? String(peer.host || '') + ':' + String(peer.port || '') : 'unknown address';
+    var state = offlinePeers[deviceId] ? 'offline · last seen ' + formatLastSeen(deviceId) : 'online';
+    return host + ' · ' + state;
   }
 
   function catalogFor(deviceId) {
@@ -422,6 +488,33 @@
     }
   }
 
+  // Tracks whether WE disabled the composer, so releasing the offline lock can
+  // never re-enable an input the host disabled for its own reasons (e.g. a
+  // pending clarification request).
+  var offlineComposerLock = false;
+  var offlinePlaceholder = '';
+
+  function applyOfflineComposerLock(shouldLock) {
+    var msg = document.getElementById('msg');
+    if (!msg) return;
+    if (shouldLock) {
+      if (msg.disabled && !offlineComposerLock) return; // host owns this lock
+      if (!offlineComposerLock) offlinePlaceholder = msg.placeholder || '';
+      offlineComposerLock = true;
+      msg.disabled = true;
+      msg.placeholder = peerLabel(bindingDevice(activeSessionId())) +
+        ' is offline — read-only';
+      msg.classList.add('apers-composer-offline');
+    } else {
+      if (!offlineComposerLock) return;
+      offlineComposerLock = false;
+      msg.disabled = false;
+      msg.placeholder = offlinePlaceholder;
+      msg.classList.remove('apers-composer-offline');
+    }
+    if (typeof updateSendBtn === 'function') updateSendBtn();
+  }
+
   function updateTargetUi() {
     var desktopStatus = document.getElementById('apersDesktopStatus');
     var desktopActive = isDesktopConversation(activeSessionId());
@@ -438,12 +531,21 @@
           ? (connectionChecked ? 'Hermes · PC unreachable' : 'Hermes · PC checking…')
           : 'Computer not linked');
     }
+    // A conversation pinned to an offline PC is genuinely read-only: nothing can
+    // be delivered and the send would only fail. Lock the composer itself rather
+    // than letting the user type a message that has nowhere to go — msg.disabled
+    // is the host's own composer lock (getComposerPrimaryAction -> 'disabled'),
+    // and unlike S.busy it does not drive the queued-message drain.
+    var activeDevice = bindingDevice(activeSessionId());
+    applyOfflineComposerLock(desktopActive && linked &&
+      ((connectionChecked && !online) || !!offlinePeers[activeDevice]));
     if (desktopActive && !S.busy && typeof setComposerStatus === 'function') {
       setComposerStatus(online
         ? ''
         : (linked
           ? (connectionChecked
-            ? 'Hermes PC is offline. This conversation is available read-only.'
+            ? peerLabel(bindingDevice(activeSessionId())) +
+              ' is offline. This conversation is available read-only.'
             : 'Checking Hermes PC…')
           : 'Link Hermes PC to continue this conversation.'));
     }
@@ -481,7 +583,8 @@
     if (connectionChecked && !online) {
       updateTargetUi();
       if (typeof showToast === 'function') {
-        showToast('Hermes PC is offline. Reconnect it to continue this conversation.',
+        showToast(peerLabel(bindingDevice(activeSessionId())) +
+          ' is offline. Reconnect it to continue this conversation.',
           3500, 'error');
       }
       return;
@@ -918,7 +1021,7 @@
     titleRow.appendChild(age);
     text.appendChild(titleRow);
     row.appendChild(text);
-    if (!offlinePeers[session.deviceId]) attachDesktopSessionGesture(row, session);
+    attachDesktopSessionGesture(row, session);
     list.appendChild(row);
   }
 
@@ -933,12 +1036,19 @@
     });
     if (sidebarState) {
       appendSidebarState(list, sidebarState, sidebarStateIsError);
+    } else if (!computerPeers.length && !query) {
+      // Zero paired PCs: every other route to openAddComputer lives behind a
+      // per-PC surface (group-header manager, or the picker, which needs 2+),
+      // so without this the first computer can only be paired on the native
+      // screen. This is the one entry point that must not depend on a peer.
+      appendAddComputerCta(list);
     } else if (!rows.length) {
       appendSidebarState(
         list,
         query ? 'No matching Desktop sessions.' :
           (connectionChecked && !online
-            ? 'Hermes PC is offline. Cached sessions remain available to read.'
+            ? friendlyBrokerError('unreachable', defaultDeviceId()) +
+              ' Cached sessions remain available to read.'
             : 'No Desktop sessions yet.'),
         false);
     }
@@ -970,10 +1080,14 @@
     });
     var lastDeviceId = null;
     groups.forEach(function (group) {
-      if (computerPeers.length > 1 && group.deviceId !== lastDeviceId) {
+      if (computerPeers.length >= 1 && group.deviceId !== lastDeviceId) {
         var peerHeading = document.createElement('div');
-        peerHeading.className = 'apers-peer-group-heading';
+        peerHeading.className = 'apers-peer-group-heading ' +
+          (offlinePeers[group.deviceId] ? 'is-pc-offline' : 'is-pc-online');
         peerHeading.textContent = peerLabel(group.deviceId);
+        (function (headingDevice) {
+          peerHeading.onclick = function () { openComputerManager(headingDevice); };
+        })(group.deviceId);
         list.appendChild(peerHeading);
         lastDeviceId = group.deviceId;
       }
@@ -1008,6 +1122,24 @@
       attachProjectGrip(header, wrapper, persistDesktopProjectDomOrder);
       list.appendChild(wrapper);
     });
+  }
+
+  function appendAddComputerCta(list) {
+    var wrap = document.createElement('div');
+    wrap.className = 'apers-sidebar-state';
+    wrap.textContent = 'No computer linked yet. Pair one to run Hermes on your PC.';
+    list.appendChild(wrap);
+    var host = bridge();
+    // Feature-detect: on an older APK the bridge lacks these, and the native
+    // Mesh screen remains the way in — don't offer a button that cannot work.
+    if (!host || (typeof host.pairComputer !== 'function' &&
+        typeof host.discoverComputer !== 'function')) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'apers-sidebar-state apers-sidebar-state-retry';
+    button.textContent = '+ Add a computer';
+    button.addEventListener('click', openAddComputer);
+    list.appendChild(button);
   }
 
   function appendSidebarState(list, message, isError) {
@@ -1573,6 +1705,9 @@
     backdrop.className = 'apers-session-actions';
     var panel = document.createElement('section');
     panel.className = 'apers-session-actions-panel';
+    // No actions means the title IS the content (an informational sheet), so it
+    // must wrap rather than clip to one ellipsised line.
+    if (!actions.length) panel.classList.add('is-message');
     var heading = document.createElement('strong');
     heading.textContent = title;
     panel.appendChild(heading);
@@ -1668,6 +1803,18 @@
       if (online) bindDesktopSession(desktopSessionId, true, localId, deviceId);
       return;
     }
+    // No cached shell: preparing one needs the PC. If it is offline, bail out
+    // with a named message — bindDesktopSession would otherwise fall back to
+    // activeSessionId() and bind this offline session onto whatever conversation
+    // is currently open, silently rerouting the user to a different PC.
+    // Read offlinePeers rather than refreshLinkStatus(): the latter mutates the
+    // global linked/online pair, which describes the ACTIVE conversation's PC.
+    if (offlinePeers[deviceId]) {
+      showPickerState(peerLabel(deviceId) +
+        ' is offline. This conversation has not been opened on this phone yet, ' +
+        'so it cannot be shown until that computer is back.', true, deviceId, true);
+      return;
+    }
     bindDesktopSession(desktopSessionId, false, null, deviceId);
   }
 
@@ -1735,7 +1882,11 @@
     return backdrop;
   }
 
-  function showPickerState(message, isError) {
+  function showPickerState(message, isError, deviceId, authored) {
+    // Callers may pass a deviceId so the copy can name the PC; without one the
+    // helper falls back to the generic wording rather than stripping a name a
+    // caller already resolved.
+    if (isError) message = friendlyBrokerError(message, deviceId, authored);
     if (sidebarMode === 'desktop') {
       sidebarState = String(message || '');
       sidebarStateIsError = !!isError;
@@ -1781,10 +1932,14 @@
     }
     var lastPeer = null;
     shown.forEach(function (session) {
-      if (computerPeers.length > 1 && session.deviceId !== lastPeer) {
+      if (computerPeers.length >= 1 && session.deviceId !== lastPeer) {
         var peerHeader = document.createElement('div');
-        peerHeader.className = 'apers-peer-group-heading';
+        peerHeader.className = 'apers-peer-group-heading ' +
+          (offlinePeers[session.deviceId] ? 'is-pc-offline' : 'is-pc-online');
         peerHeader.textContent = peerLabel(session.deviceId);
+        (function (headerDevice) {
+          peerHeader.onclick = function () { openComputerManager(headerDevice); };
+        })(session.deviceId);
         list.appendChild(peerHeader);
         lastPeer = session.deviceId;
       }
@@ -1834,11 +1989,24 @@
         var id = peerId(peer);
         var button = document.createElement('button');
         button.type = 'button';
-        button.className = 'apers-peer-picker-item';
-        button.textContent = peerLabel(id);
+        button.className = 'apers-peer-picker-item ' +
+          (offlinePeers[id] ? 'is-pc-offline' : 'is-pc-online');
+        var name = document.createElement('span');
+        name.textContent = peerLabel(id);
+        var detail = document.createElement('small');
+        detail.className = 'apers-peer-picker-detail';
+        detail.textContent = peerDetail(id);
+        button.appendChild(name);
+        button.appendChild(detail);
         button.onclick = function () { backdrop.remove(); resolve(id); };
         panel.appendChild(button);
       });
+      var addButton = document.createElement('button');
+      addButton.type = 'button';
+      addButton.className = 'apers-peer-picker-item apers-peer-picker-add';
+      addButton.textContent = '+ Add a computer';
+      addButton.onclick = function () { backdrop.remove(); resolve(''); openAddComputer(); };
+      panel.appendChild(addButton);
       var cancel = document.createElement('button');
       cancel.type = 'button';
       cancel.className = 'apers-peer-picker-cancel';
@@ -1851,6 +2019,182 @@
       };
       document.body.appendChild(backdrop);
     });
+  }
+
+  function openTextSheet(title, placeholder, initial, onSubmit) {
+    closeActionSheet();
+    var backdrop = document.createElement('div');
+    backdrop.id = 'apersSessionActions';
+    backdrop.className = 'apers-session-actions';
+    var panel = document.createElement('section');
+    panel.className = 'apers-session-actions-panel';
+    var heading = document.createElement('strong');
+    heading.textContent = title;
+    panel.appendChild(heading);
+    var input = document.createElement('textarea');
+    input.className = 'apers-text-sheet-input';
+    input.placeholder = placeholder || '';
+    input.value = initial || '';
+    input.rows = 3;
+    panel.appendChild(input);
+    var save = document.createElement('button');
+    save.type = 'button';
+    save.textContent = 'Save';
+    save.onclick = function () {
+      var value = input.value;
+      closeActionSheet();
+      onSubmit(value);
+    };
+    panel.appendChild(save);
+    var cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'apers-actions-cancel';
+    cancel.textContent = 'Cancel';
+    cancel.onclick = closeActionSheet;
+    panel.appendChild(cancel);
+    backdrop.appendChild(panel);
+    backdrop.onclick = function (event) {
+      if (event.target === backdrop) closeActionSheet();
+    };
+    document.body.appendChild(backdrop);
+    setTimeout(function () { input.focus(); }, 60);
+  }
+
+  function openComputerManager(deviceId) {
+    var actions = [
+      { label: 'Rename', run: function () {
+        openTextSheet('Name this computer', 'e.g. Main PC', pcNames[deviceId] || '',
+          function (value) {
+            setPeerName(deviceId, value);
+            renderUnifiedSidebar();
+          });
+      } },
+      { label: 'Add another computer…', run: openAddComputer },
+      { label: 'Unpair…', danger: true, run: function () {
+        openActionSheet('Unpair ' + peerLabel(deviceId) +
+          '? Its conversations stay readable on the phone but can no longer be used.', [
+          { label: 'Unpair', danger: true, run: function () { unpairComputerFlow(deviceId); } }
+        ]);
+      } }
+    ];
+    openActionSheet(peerLabel(deviceId) + ' — ' + peerDetail(deviceId), actions);
+  }
+
+  function unpairComputerFlow(deviceId) {
+    var host = bridge();
+    if (!host || typeof host.unpairComputer !== 'function') {
+      if (typeof showToast === 'function') showToast('Unpairing needs the updated app.', 3000, 'error');
+      return;
+    }
+    unpairCallback = function (event) {
+      if (event.ok) {
+        delete desktopCatalog[deviceId];
+        delete offlinePeers[deviceId];
+        delete offlineRetry[deviceId];
+        // The friendly name is kept on purpose: re-pairing the same PC restores
+        // it. Last-seen is stale the moment we unpair, so drop it rather than
+        // leak an entry that can never be refreshed.
+        delete pcLastSeen[deviceId];
+        writeJson(PC_LASTSEEN_KEY, pcLastSeen);
+        desktopSessions = desktopSessions.filter(function (session) {
+          return session.deviceId !== deviceId;
+        });
+        saveDesktopCatalog();
+        refreshComputerPeers();
+        renderUnifiedSidebar();
+        if (typeof showToast === 'function') showToast('Unpaired.', 2000);
+      } else if (typeof showToast === 'function') {
+        showToast(String(event.error || 'Unpair failed.'), 3000, 'error');
+      }
+    };
+    host.unpairComputer(deviceId);
+  }
+
+  function openAddComputer() {
+    var host = bridge();
+    var actions = [];
+    if (host && typeof host.discoverComputer === 'function') {
+      actions.push({ label: 'Find on this network', run: function () {
+        if (typeof showToast === 'function') showToast('Searching…', 2500);
+        discoverCallback = function (event) {
+          if (event.ok && event.payload) {
+            var found = {};
+            try { found = JSON.parse(event.payload) || {}; } catch (_) {}
+            // Discovery returns a single winner. With more than one companion on
+            // the network that winner is often a PC we already have, so pairing
+            // it would silently re-add an existing peer instead of the one the
+            // user is looking for. Name it and point at the paste-code path.
+            var already = String(found.did || '') && computerPeers.some(function (peer) {
+              return peerId(peer) === String(found.did);
+            });
+            if (already) {
+              openActionSheet(peerLabel(String(found.did)) +
+                ' is already added. To add a different computer, use ' +
+                '“Enter pairing code” from its console.', []);
+              return;
+            }
+            openActionSheet('Pair ' + String(found.host || 'computer') + ' · ' +
+              String(found.did || '').slice(0, 10) + '?', [
+              { label: 'Pair', run: function () { pairComputerFlow(event.payload); } }
+            ]);
+          } else if (typeof showToast === 'function') {
+            showToast(String(event.error ||
+              'No computer found. Is its companion running?'), 3500, 'error');
+          }
+        };
+        host.discoverComputer();
+      } });
+    }
+    if (host && typeof host.pairComputer === 'function') {
+      actions.push({ label: 'Enter pairing code', run: function () {
+        openTextSheet('Paste the pairing code from the computer’s console',
+          '{"did": …}', '', function (value) {
+            if (String(value || '').trim()) pairComputerFlow(String(value).trim());
+          });
+      } });
+    }
+    if (!actions.length) {
+      if (typeof showToast === 'function') showToast('Adding a computer needs the updated app.', 3000, 'error');
+      return;
+    }
+    openActionSheet('Add a computer', actions);
+  }
+
+  function pairComputerFlow(payload) {
+    var host = bridge();
+    if (!host || typeof host.pairComputer !== 'function') return;
+    pairCallback = function (event) {
+      refreshComputerPeers();
+      if (event.ok) {
+        if (typeof showToast === 'function') {
+          showToast('Paired ' + peerLabel(String(event.deviceId || '')) + '.', 2500);
+        }
+        renderUnifiedSidebar();
+        if (event.deviceId) requestDesktopSessions('__desktop_sidebar__', String(event.deviceId));
+      } else if (typeof showToast === 'function') {
+        showToast('Pairing failed: ' + String(event.error || 'unknown error') +
+          '. Is the pairing window open on that computer?', 4500, 'error');
+      }
+    };
+    host.pairComputer(payload);
+  }
+
+  function onPairResult(event) {
+    var callback = pairCallback;
+    pairCallback = null;
+    if (callback) callback(event || {});
+  }
+
+  function onDiscoverResult(event) {
+    var callback = discoverCallback;
+    discoverCallback = null;
+    if (callback) callback(event || {});
+  }
+
+  function onUnpairResult(event) {
+    var callback = unpairCallback;
+    unpairCallback = null;
+    if (callback) callback(event || {});
   }
 
   function formatSessionAge(timestamp) {
@@ -1886,7 +2230,8 @@
     var deviceId = extra && extra.deviceId || bindingDevice(sessionId);
     if (!host || typeof host.sendToComputer !== 'function' || !refreshLinkStatus(deviceId) ||
         (connectionChecked && !online)) {
-      showPickerState('Hermes PC is unreachable.', true);
+      showPickerState(
+        (deviceId ? peerLabel(deviceId) : 'Hermes PC') + ' is unreachable.', true);
       return;
     }
     controlRequests[conversation] = Object.assign({
@@ -1979,7 +2324,7 @@
     var deviceId = deviceOverride || (selected && selected.deviceId) || bindingDevice(sessionId) || defaultDeviceId();
     if (!silent && !isDesktopConversation(sessionId)) {
       if (!refreshLinkStatus(deviceId)) {
-        showPickerState('Hermes PC is unreachable.', true);
+        showPickerState('unreachable', true, deviceId);
         return;
       }
       // Double-tap guard: a second tap on the same (or any) uncached Desktop
@@ -2000,7 +2345,8 @@
           timedOut
             ? 'Preparing this conversation timed out. Tap to try again.'
             : 'Could not prepare this conversation on the phone. Tap to try again.',
-          function () { bindDesktopSession(desktopSessionId, false); });
+          function () { bindDesktopSession(desktopSessionId, false); },
+          deviceId, true);
         return;
       }
       preparingDesktopId = '';
@@ -2047,7 +2393,7 @@
     }
     if (!isDesktopConversation(sessionId)) {
       if (!refreshLinkStatus(deviceId)) {
-        showPickerState('Hermes PC is unreachable.', true);
+        showPickerState('unreachable', true, deviceId);
         return;
       }
       sessionId = await ensureDesktopShell();
@@ -2171,9 +2517,11 @@
     desktopRetry = typeof action === 'function' ? action : null;
   }
 
-  function showDesktopError(message, retryAction) {
+  function showDesktopError(message, retryAction, deviceId, authored) {
     setDesktopRetry(retryAction);
-    showPickerState(message, true);
+    // Pass the device through so the copy names the PC; without it every error
+    // routed here degrades to the generic "The computer …" wording.
+    showPickerState(message, true, deviceId, authored);
   }
 
   // Expire control requests that were accepted but never answered so a stuck
@@ -2208,14 +2556,16 @@
     if (expiredBind) {
       var desktopSessionId = expiredBind.desktopSessionId;
       showDesktopError(
-        'The computer did not respond. Tap to try again.',
-        function () { bindDesktopSession(desktopSessionId, false); });
+        peerLabel(expiredBind.deviceId) + ' did not respond. Tap to try again.',
+        function () { bindDesktopSession(desktopSessionId, false); },
+        expiredBind.deviceId, true);
     } else if (sidebarState === 'Loading conversation…' ||
                sidebarState === 'Preparing this Desktop conversation…' ||
                sidebarState === 'Preparing a new Desktop session…') {
       // A non-bind control (or a silent bind) was the only thing keeping a
       // loading state up; clear it so the catalogue is usable again.
-      showPickerState('The computer did not respond. Please try again.', true);
+      showPickerState(peerLabel(defaultDeviceId()) +
+        ' did not respond. Please try again.', true, defaultDeviceId(), true);
     }
   }
 
@@ -2260,13 +2610,14 @@
           if (control.kind === 'bind') {
             var retryDesktopId = control.desktopSessionId;
             showDesktopError(
-              'Computer connection failed: ' + String(event.error || 'Unknown error') +
-                '. Tap to try again.',
-              function () { bindDesktopSession(retryDesktopId, false); });
+              friendlyBrokerError(
+                String(event.error || 'Unknown error'), control.deviceId) +
+                ' Tap to try again.',
+              function () { bindDesktopSession(retryDesktopId, false); },
+              control.deviceId, true);
           } else {
             showPickerState(
-              'Computer connection failed: ' + String(event.error || 'Unknown error'),
-              true);
+              String(event.error || 'Unknown error'), true, control.deviceId);
           }
         }
         return;
@@ -2300,7 +2651,9 @@
       }
       failedThread.messages.push({
         role: 'assistant',
-        content: 'Computer connection failed: ' + String(event && event.error || 'Unknown error'),
+        content: friendlyBrokerError(
+          String(event && event.error || 'Unknown error'),
+          dispatch && dispatch.deviceId || bindingDevice(sessionId)),
         _ts: Date.now() / 1000
       });
       saveThread(sessionId, failedThread);
@@ -2333,6 +2686,7 @@
 
   function onResults(payload, deviceId) {
     deviceId = deviceId || pollDevice || '';
+    markPeerSeen(deviceId);
     online = true;
     connectionChecked = true;
     updateTargetUi();
@@ -2491,10 +2845,14 @@
     }
     if (owner.kind === 'list') {
       if (owner.deviceId) delete offlinePeers[owner.deviceId];
-      desktopSessions = Array.isArray(value.sessions) ? value.sessions : [];
-      setDesktopCatalog(owner.deviceId, desktopSessions);
+      // Only THIS device's sessions came back. Assigning them to desktopSessions
+      // would drop every other PC's rows from the sidebar until the next full
+      // rebuild — with a second PC offline (no reply to merge back in) its
+      // conversations simply vanish. setDesktopCatalog owns the merged array.
+      var deviceSessions = Array.isArray(value.sessions) ? value.sessions : [];
+      setDesktopCatalog(owner.deviceId, deviceSessions);
       var selectedId = String(value.selected_session_id || '');
-      var selected = desktopSessions.find(function (session) {
+      var selected = deviceSessions.find(function (session) {
         return session.id === selectedId;
       });
       var desktopOwner = isDesktopConversation(owner.sessionId);
@@ -2645,8 +3003,18 @@
   }
 
   function onPollStatus(event) {
+    if (event && event.busy) {
+      // Native dropped this poll because another poll was still running.
+      // Clear the latch without treating it as a link-state signal.
+      if (pollInFlight) finishDevicePoll();
+      return;
+    }
     var completedDevice = pollDevice;
-    if (completedDevice) delete offlinePeers[completedDevice];
+    if (completedDevice) {
+      delete offlinePeers[completedDevice];
+      delete offlineRetry[completedDevice];
+      if (event && event.ok) markPeerSeen(completedDevice);
+    }
     if (!bindingDevice(activeSessionId()) || bindingDevice(activeSessionId()) === completedDevice) {
       online = !!(event && event.ok);
     }
@@ -2671,7 +3039,15 @@
       pollStartedAt = 0;
       pollDevice = '';
     }
-    pollQueue = computerPeers.map(peerId).filter(Boolean);
+    if (document.visibilityState === 'hidden') return;
+    pollQueue = computerPeers.map(peerId).filter(Boolean).filter(function (id) {
+      if (!offlinePeers[id]) return true;
+      // An offline PC gets a retry every ~8 cycles instead of every cycle, so a
+      // dead peer's socket timeouts don't tax the healthy one.
+      offlineRetry[id] = (offlineRetry[id] || 0) + 1;
+      if (offlineRetry[id] >= 8) { offlineRetry[id] = 0; return true; }
+      return false;
+    });
     if (!pollQueue.length) return;
     startDevicePoll(pollQueue.shift(), 0);
   }
@@ -2702,7 +3078,12 @@
     onDispatch: onDispatch,
     onResults: onResults,
     onPollError: onPollError,
-    onPollStatus: onPollStatus
+    onPollStatus: onPollStatus,
+    onPairResult: onPairResult,
+    onDiscoverResult: onDiscoverResult,
+    onUnpairResult: onUnpairResult,
+    addComputer: openAddComputer,
+    manageComputer: openComputerManager
   };
 
   window.ApersAndroidChrome = {

@@ -574,6 +574,60 @@
     return v0
 .end method
 
+.method public pairComputer(Ljava/lang/String;)V
+    .locals 7
+    .annotation runtime Landroid/webkit/JavascriptInterface;
+    .end annotation
+    new-instance v0, Ljava/lang/Thread;
+    new-instance v1, Lcom/hermes/android/webui/DeviceOperationRunnable;
+    const/4 v3, 0x4
+    const/4 v5, 0x0
+    move-object v2, p0
+    move-object v4, p1
+    move-object v6, v5
+    invoke-direct/range {v1 .. v6}, Lcom/hermes/android/webui/DeviceOperationRunnable;-><init>(Lcom/hermes/android/webui/ChatWebActivity$AndroidBridge;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+    const-string v2, "computer-pair-device"
+    invoke-direct {v0, v1, v2}, Ljava/lang/Thread;-><init>(Ljava/lang/Runnable;Ljava/lang/String;)V
+    invoke-virtual {v0}, Ljava/lang/Thread;->start()V
+    return-void
+.end method
+
+.method public discoverComputer()V
+    .locals 7
+    .annotation runtime Landroid/webkit/JavascriptInterface;
+    .end annotation
+    new-instance v0, Ljava/lang/Thread;
+    new-instance v1, Lcom/hermes/android/webui/DeviceOperationRunnable;
+    const/4 v3, 0x5
+    const/4 v4, 0x0
+    move-object v2, p0
+    move-object v5, v4
+    move-object v6, v4
+    invoke-direct/range {v1 .. v6}, Lcom/hermes/android/webui/DeviceOperationRunnable;-><init>(Lcom/hermes/android/webui/ChatWebActivity$AndroidBridge;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+    const-string v2, "computer-discover-device"
+    invoke-direct {v0, v1, v2}, Ljava/lang/Thread;-><init>(Ljava/lang/Runnable;Ljava/lang/String;)V
+    invoke-virtual {v0}, Ljava/lang/Thread;->start()V
+    return-void
+.end method
+
+.method public unpairComputer(Ljava/lang/String;)V
+    .locals 7
+    .annotation runtime Landroid/webkit/JavascriptInterface;
+    .end annotation
+    new-instance v0, Ljava/lang/Thread;
+    new-instance v1, Lcom/hermes/android/webui/DeviceOperationRunnable;
+    const/4 v3, 0x6
+    const/4 v5, 0x0
+    move-object v2, p0
+    move-object v4, p1
+    move-object v6, v5
+    invoke-direct/range {v1 .. v6}, Lcom/hermes/android/webui/DeviceOperationRunnable;-><init>(Lcom/hermes/android/webui/ChatWebActivity$AndroidBridge;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+    const-string v2, "computer-unpair-device"
+    invoke-direct {v0, v1, v2}, Ljava/lang/Thread;-><init>(Ljava/lang/Runnable;Ljava/lang/String;)V
+    invoke-virtual {v0}, Ljava/lang/Thread;->start()V
+    return-void
+.end method
+
 
 # Device-aware bridge operations are kept separate so the legacy methods above
 # retain their original behavior and signatures.
@@ -594,12 +648,162 @@
     invoke-direct {p0, p2, p3}, Lcom/hermes/android/webui/ChatWebActivity$AndroidBridge;->lambda$ackComputerResultsDevice$5(Ljava/lang/String;Ljava/lang/String;)V
     return-void
 
+    :pswitch_3
+    invoke-direct {p0, p2}, Lcom/hermes/android/webui/ChatWebActivity$AndroidBridge;->lambda$pairComputer$6(Ljava/lang/String;)V
+    return-void
+
+    :pswitch_4
+    invoke-direct {p0}, Lcom/hermes/android/webui/ChatWebActivity$AndroidBridge;->lambda$discoverComputer$7()V
+    return-void
+
+    :pswitch_5
+    invoke-direct {p0, p2}, Lcom/hermes/android/webui/ChatWebActivity$AndroidBridge;->lambda$unpairComputer$8(Ljava/lang/String;)V
+    return-void
+
     :pswitch_data_0
     .packed-switch 0x1
         :pswitch_0
         :pswitch_1
         :pswitch_2
+        :pswitch_3
+        :pswitch_4
+        :pswitch_5
     .end packed-switch
+.end method
+
+.method private synthetic lambda$pairComputer$6(Ljava/lang/String;)V
+    .locals 5
+    new-instance v0, Lorg/json/JSONObject;
+    invoke-direct {v0}, Lorg/json/JSONObject;-><init>()V
+    :try_start_pr
+    iget-object v1, p0, Lcom/hermes/android/webui/ChatWebActivity$AndroidBridge;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
+    invoke-static {v1}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$mgetMeshController(Lcom/hermes/android/webui/ChatWebActivity;)Ljava/lang/Object;
+    move-result-object v1
+    invoke-virtual {v1}, Ljava/lang/Object;->getClass()Ljava/lang/Class;
+    move-result-object v2
+    const-string v3, "pairFromQr"
+    const-class v4, Ljava/lang/String;
+    filled-new-array {v4}, [Ljava/lang/Class;
+    move-result-object v4
+    invoke-virtual {v2, v3, v4}, Ljava/lang/Class;->getMethod(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;
+    move-result-object v2
+    filled-new-array {p1}, [Ljava/lang/Object;
+    move-result-object v3
+    invoke-virtual {v2, v1, v3}, Ljava/lang/reflect/Method;->invoke(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;
+    move-result-object v1
+    const-string v2, "ok"
+    const/4 v3, 0x1
+    invoke-virtual {v0, v2, v3}, Lorg/json/JSONObject;->put(Ljava/lang/String;Z)Lorg/json/JSONObject;
+    if-eqz v1, :cond_pr0
+    invoke-virtual {v1}, Ljava/lang/Object;->getClass()Ljava/lang/Class;
+    move-result-object v2
+    const-string v3, "getDeviceId"
+    invoke-static {v2, v1, v3}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$sminvokeString(Ljava/lang/Class;Ljava/lang/Object;Ljava/lang/String;)Ljava/lang/String;
+    move-result-object v1
+    const-string v2, "deviceId"
+    invoke-virtual {v0, v2, v1}, Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;
+    :cond_pr0
+    :try_end_pr
+    .catchall {:try_start_pr .. :try_end_pr} :catchall_pr
+    goto :goto_pr
+    :catchall_pr
+    move-exception v1
+    iget-object v2, p0, Lcom/hermes/android/webui/ChatWebActivity$AndroidBridge;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
+    invoke-static {v2, v1}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$mrootMessage(Lcom/hermes/android/webui/ChatWebActivity;Ljava/lang/Throwable;)Ljava/lang/String;
+    move-result-object v1
+    const-string v3, ""
+    invoke-static {v2, v3, v1}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$merrorPayload(Lcom/hermes/android/webui/ChatWebActivity;Ljava/lang/String;Ljava/lang/String;)Lorg/json/JSONObject;
+    move-result-object v0
+    :goto_pr
+    iget-object v1, p0, Lcom/hermes/android/webui/ChatWebActivity$AndroidBridge;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
+    const-string v2, "onPairResult"
+    invoke-static {v1, v2, v0}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$mpostComputerEvent(Lcom/hermes/android/webui/ChatWebActivity;Ljava/lang/String;Lorg/json/JSONObject;)V
+    return-void
+.end method
+
+.method private synthetic lambda$discoverComputer$7()V
+    .locals 4
+    new-instance v0, Lorg/json/JSONObject;
+    invoke-direct {v0}, Lorg/json/JSONObject;-><init>()V
+    :try_start_dv
+    const/16 v1, 0x9c4
+    invoke-static {v1}, Lcom/hermes/android/handoff/AutoPair;->discover(I)Ljava/lang/String;
+    move-result-object v1
+    const-string v2, "ok"
+    if-eqz v1, :cond_dv0
+    const/4 v3, 0x1
+    invoke-virtual {v0, v2, v3}, Lorg/json/JSONObject;->put(Ljava/lang/String;Z)Lorg/json/JSONObject;
+    const-string v2, "payload"
+    invoke-virtual {v0, v2, v1}, Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;
+    goto :goto_dv
+    :cond_dv0
+    const/4 v3, 0x0
+    invoke-virtual {v0, v2, v3}, Lorg/json/JSONObject;->put(Ljava/lang/String;Z)Lorg/json/JSONObject;
+    const-string v2, "error"
+    const-string v3, "No computer found on this network."
+    invoke-virtual {v0, v2, v3}, Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;
+    :goto_dv
+    :try_end_dv
+    .catchall {:try_start_dv .. :try_end_dv} :catchall_dv
+    goto :goto_dv1
+    :catchall_dv
+    move-exception v1
+    iget-object v2, p0, Lcom/hermes/android/webui/ChatWebActivity$AndroidBridge;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
+    invoke-static {v2, v1}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$mrootMessage(Lcom/hermes/android/webui/ChatWebActivity;Ljava/lang/Throwable;)Ljava/lang/String;
+    move-result-object v1
+    const-string v3, ""
+    invoke-static {v2, v3, v1}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$merrorPayload(Lcom/hermes/android/webui/ChatWebActivity;Ljava/lang/String;Ljava/lang/String;)Lorg/json/JSONObject;
+    move-result-object v0
+    :goto_dv1
+    iget-object v1, p0, Lcom/hermes/android/webui/ChatWebActivity$AndroidBridge;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
+    const-string v2, "onDiscoverResult"
+    invoke-static {v1, v2, v0}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$mpostComputerEvent(Lcom/hermes/android/webui/ChatWebActivity;Ljava/lang/String;Lorg/json/JSONObject;)V
+    return-void
+.end method
+
+.method private synthetic lambda$unpairComputer$8(Ljava/lang/String;)V
+    .locals 5
+    new-instance v0, Lorg/json/JSONObject;
+    invoke-direct {v0}, Lorg/json/JSONObject;-><init>()V
+    :try_start_un
+    iget-object v1, p0, Lcom/hermes/android/webui/ChatWebActivity$AndroidBridge;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
+    invoke-static {v1}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$mgetMeshController(Lcom/hermes/android/webui/ChatWebActivity;)Ljava/lang/Object;
+    move-result-object v1
+    invoke-virtual {v1}, Ljava/lang/Object;->getClass()Ljava/lang/Class;
+    move-result-object v2
+    const-string v3, "unpair"
+    const-class v4, Ljava/lang/String;
+    filled-new-array {v4}, [Ljava/lang/Class;
+    move-result-object v4
+    invoke-virtual {v2, v3, v4}, Ljava/lang/Class;->getMethod(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;
+    move-result-object v2
+    filled-new-array {p1}, [Ljava/lang/Object;
+    move-result-object v3
+    invoke-virtual {v2, v1, v3}, Ljava/lang/reflect/Method;->invoke(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;
+    move-result-object v1
+    sget-object v2, Ljava/lang/Boolean;->TRUE:Ljava/lang/Boolean;
+    invoke-virtual {v2, v1}, Ljava/lang/Boolean;->equals(Ljava/lang/Object;)Z
+    move-result v1
+    const-string v2, "ok"
+    invoke-virtual {v0, v2, v1}, Lorg/json/JSONObject;->put(Ljava/lang/String;Z)Lorg/json/JSONObject;
+    const-string v1, "deviceId"
+    invoke-virtual {v0, v1, p1}, Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;
+    :try_end_un
+    .catchall {:try_start_un .. :try_end_un} :catchall_un
+    goto :goto_un
+    :catchall_un
+    move-exception v1
+    iget-object v2, p0, Lcom/hermes/android/webui/ChatWebActivity$AndroidBridge;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
+    invoke-static {v2, v1}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$mrootMessage(Lcom/hermes/android/webui/ChatWebActivity;Ljava/lang/Throwable;)Ljava/lang/String;
+    move-result-object v1
+    const-string v3, ""
+    invoke-static {v2, v3, v1}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$merrorPayload(Lcom/hermes/android/webui/ChatWebActivity;Ljava/lang/String;Ljava/lang/String;)Lorg/json/JSONObject;
+    move-result-object v0
+    :goto_un
+    iget-object v1, p0, Lcom/hermes/android/webui/ChatWebActivity$AndroidBridge;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
+    const-string v2, "onUnpairResult"
+    invoke-static {v1, v2, v0}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$mpostComputerEvent(Lcom/hermes/android/webui/ChatWebActivity;Ljava/lang/String;Lorg/json/JSONObject;)V
+    return-void
 .end method
 
 .method private synthetic lambda$sendToComputerDevice$3(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
@@ -1175,7 +1379,26 @@
     const-string v2, "computer-chat-poll-device"
     invoke-direct {v0, v1, v2}, Ljava/lang/Thread;-><init>(Ljava/lang/Runnable;Ljava/lang/String;)V
     invoke-virtual {v0}, Ljava/lang/Thread;->start()V
+    return-void
+
     :cond_dp0
+    :try_start_busy
+    new-instance v0, Lorg/json/JSONObject;
+    invoke-direct {v0}, Lorg/json/JSONObject;-><init>()V
+    const-string v3, "ok"
+    const/4 v4, 0x1
+    invoke-virtual {v0, v3, v4}, Lorg/json/JSONObject;->put(Ljava/lang/String;Z)Lorg/json/JSONObject;
+    const-string v3, "busy"
+    invoke-virtual {v0, v3, v4}, Lorg/json/JSONObject;->put(Ljava/lang/String;Z)Lorg/json/JSONObject;
+    iget-object v3, p0, Lcom/hermes/android/webui/ChatWebActivity$AndroidBridge;->this$0:Lcom/hermes/android/webui/ChatWebActivity;
+    const-string v4, "onPollStatus"
+    invoke-static {v3, v4, v0}, Lcom/hermes/android/webui/ChatWebActivity;->-$$Nest$mpostComputerEvent(Lcom/hermes/android/webui/ChatWebActivity;Ljava/lang/String;Lorg/json/JSONObject;)V
+    :try_end_busy
+    .catchall {:try_start_busy .. :try_end_busy} :catchall_busy
+    goto :goto_busy
+    :catchall_busy
+    move-exception v0
+    :goto_busy
     return-void
 .end method
 

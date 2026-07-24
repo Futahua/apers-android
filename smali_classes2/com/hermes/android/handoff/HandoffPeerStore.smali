@@ -937,6 +937,36 @@
     throw v0
 .end method
 
+.method public final remove(Ljava/lang/String;)Z
+    .locals 1
+
+    if-nez p1, :cond_rm0
+
+    const/4 v0, 0x0
+
+    return v0
+
+    :cond_rm0
+    iget-object v0, p0, Lcom/hermes/android/handoff/HandoffPeerStore;->peers:Ljava/util/Map;
+
+    invoke-interface {v0, p1}, Ljava/util/Map;->remove(Ljava/lang/Object;)Ljava/lang/Object;
+
+    move-result-object v0
+
+    if-nez v0, :cond_rm1
+
+    const/4 v0, 0x0
+
+    return v0
+
+    :cond_rm1
+    invoke-direct {p0}, Lcom/hermes/android/handoff/HandoffPeerStore;->save()V
+
+    const/4 v0, 0x1
+
+    return v0
+.end method
+
 .method public final all()Ljava/util/List;
     .locals 1
     .annotation system Ldalvik/annotation/Signature;

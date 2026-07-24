@@ -1298,6 +1298,43 @@
     return-object v0
 .end method
 
+.method public final unpair(Ljava/lang/String;)Z
+    .locals 3
+
+    iget-object v0, p0, Lcom/hermes/android/mesh/MeshController;->peers:Lcom/hermes/android/handoff/HandoffPeerStore;
+
+    invoke-virtual {v0, p1}, Lcom/hermes/android/handoff/HandoffPeerStore;->remove(Ljava/lang/String;)Z
+
+    move-result v0
+
+    if-eqz v0, :cond_up0
+
+    invoke-static {p0}, Lcom/hermes/android/mesh/MeshController;->access$getLastGood$p(Lcom/hermes/android/mesh/MeshController;)Lkotlin/Pair;
+
+    move-result-object v1
+
+    if-eqz v1, :cond_up0
+
+    invoke-virtual {v1}, Lkotlin/Pair;->component1()Ljava/lang/Object;
+
+    move-result-object v1
+
+    check-cast v1, Ljava/lang/String;
+
+    invoke-static {v1, p1}, Lkotlin/jvm/internal/Intrinsics;->areEqual(Ljava/lang/Object;Ljava/lang/Object;)Z
+
+    move-result v1
+
+    if-eqz v1, :cond_up0
+
+    const/4 v2, 0x0
+
+    invoke-static {p0, v2}, Lcom/hermes/android/mesh/MeshController;->access$setLastGood$p(Lcom/hermes/android/mesh/MeshController;Lkotlin/Pair;)V
+
+    :cond_up0
+    return v0
+.end method
+
 .method public final peersJson()Ljava/lang/String;
     .locals 7
 

@@ -419,6 +419,13 @@ button.apers-sidebar-state-retry:active {
   white-space: nowrap;
 }
 
+/* Message sheets carry a full sentence rather than a session title: let the
+   heading wrap instead of clipping the actionable half to an ellipsis. */
+.apers-session-actions-panel.is-message > strong {
+  line-height: 1.45;
+  white-space: normal;
+}
+
 .apers-session-actions-panel > button {
   background: transparent;
   border: 0;
@@ -1044,3 +1051,46 @@ button.apers-sidebar-state-retry:active {
   cursor: pointer;
 }
 .apers-android-host .apers-busy-action-chip-clear:hover { background: var(--error); color: #fff; }
+
+/* --- rev 55: multi-PC presence, manager, add/unpair (LF) --- */
+.apers-peer-group-heading { cursor: pointer; }
+.apers-peer-group-heading.is-pc-online::before,
+.apers-peer-group-heading.is-pc-offline::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+.apers-peer-group-heading.is-pc-online::before { background: #34a853; }
+.apers-peer-group-heading.is-pc-offline::before { background: #9aa0a6; }
+.apers-peer-picker-item.is-pc-offline { opacity: 0.6; }
+.apers-peer-picker-item span { display: block; }
+.apers-peer-picker-detail {
+  display: block;
+  opacity: 0.65;
+  font-size: 0.78em;
+  margin-top: 2px;
+}
+.apers-peer-picker-add { opacity: 0.85; font-style: italic; }
+.apers-text-sheet-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 10px 0;
+  padding: 8px;
+  border: 1px solid rgba(128,128,128,0.4);
+  border-radius: 8px;
+  background: inherit;
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+
+/* Composer locked because the conversation's PC is offline: the input is
+   genuinely read-only, so it should look inert rather than merely unresponsive. */
+#msg.apers-composer-offline {
+  cursor: not-allowed;
+  opacity: .6;
+}
