@@ -20,12 +20,14 @@
   var CONTROL_PORT_ID = '__desktop_port__';
   var CONTROL_RENAME_ID = '__desktop_rename__';
   var CONTROL_ARCHIVE_ID = '__desktop_archive__';
+  var CONTROL_CANCEL_ID = '__desktop_cancel__';
   var CONTROL_LIST_PROMPT = '__APERS_LIST_DESKTOP_SESSIONS_V1__';
   var CONTROL_BIND_PROMPT = '__APERS_BIND_DESKTOP_SESSION_V1__';
   var CONTROL_NEW_PROMPT = '__APERS_NEW_DESKTOP_SESSION_V1__';
   var CONTROL_PORT_PROMPT = '__APERS_PORT_PHONE_SESSION_V1__';
   var CONTROL_RENAME_PROMPT = '__APERS_RENAME_DESKTOP_SESSION_V1__';
   var CONTROL_ARCHIVE_PROMPT = '__APERS_ARCHIVE_DESKTOP_SESSION_V1__';
+  var CONTROL_CANCEL_PROMPT = '__APERS_CANCEL_TASK_V1__';
   var linked = false;
   var online = false;
   var connectionChecked = false;
@@ -444,6 +446,67 @@
     setComposerBusy(true, 'Sending to Hermes on your computer…');
     dispatching[thread.conversationId] = sessionId;
     host.sendToComputer(thread.conversationId, text);
+  }
+
+  // Stop a running Desktop turn. Dispatches a cancel control op to the companion
+  // (which kills the running hermes subprocess) and settles the local turn
+  // immediately so the composer frees up without waiting for the round-trip.
+  // Returns true if a Desktop turn was active and a stop was issued.
+  function cancelComputerTask() {
+    var sessionId = activeSessionId();
+    if (!isDesktopConversation(sessionId)) return false;
+    var host = bridge();
+    var conversation = conversationId(sessionId);
+    // Tell the PC to stop. This is a control op; if the bridge/link is down we
+    // still settle locally below so the UI never gets stuck "busy".
+    if (host && typeof host.sendToComputer === 'function' && refreshLinkStatus()) {
+      controlRequests[CONTROL_CANCEL_ID] = {
+        kind: 'cancel',
+        sessionId: sessionId,
+        conversationId: conversation,
+        silent: true,
+        created: Date.now()
+      };
+      host.sendToComputer(
+        CONTROL_CANCEL_ID,
+        CONTROL_CANCEL_PROMPT + '\n' + JSON.stringify({
+          conversation_id: conversation
+        }));
+    }
+    // Settle the local turn: drop the in-flight result owner(s) for this
+    // conversation so a late result can't re-render, clear the pending user
+    // bubble's spinner, append a "Stopped." marker, and free the composer.
+    Object.keys(pending).forEach(function (id) {
+      if (pending[id] && !pending[id].kind && pending[id].sessionId === sessionId) {
+        delete pending[id];
+      }
+    });
+    delete dispatching[conversation];
+    writeJson(PENDING_KEY, pending);
+    var thread = readThread(sessionId);
+    var changed = false;
+    for (var i = thread.messages.length - 1; i >= 0; i--) {
+      if (thread.messages[i]._pending) {
+        thread.messages[i]._pending = false;
+        changed = true;
+      }
+    }
+    thread.messages.push({
+      role: 'assistant',
+      content: 'Stopped.',
+      _ts: Date.now() / 1000,
+      _computer: true,
+      _stopped: true
+    });
+    saveThread(sessionId, thread);
+    if (typeof S !== 'undefined') {
+      if (typeof clearLiveToolCards === 'function') clearLiveToolCards();
+      S.activeStreamId = null;
+      S.toolCalls = [];
+    }
+    setComposerBusy(false, '');
+    renderThread(sessionId);
+    return true;
   }
 
   function openDesktop() {
@@ -2374,6 +2437,21 @@
     window.send = function () {
       if (isDesktopConversation(activeSessionId())) return sendComputerMessage();
       return phoneSend.apply(this, arguments);
+    };
+  }
+
+  // Route the composer's Stop button to the Desktop cancel path when the active
+  // conversation is a Desktop turn. The base cancelStream() only knows how to
+  // cancel the phone's local /api/chat stream, which does nothing for a turn
+  // running on the PC. Returning true tells handleComposerPrimaryAction the
+  // stop succeeded (no "cancel_failed" toast).
+  if (typeof window.cancelStream === 'function') {
+    var phoneCancelStream = window.cancelStream;
+    window.cancelStream = function () {
+      if (isDesktopConversation(activeSessionId())) {
+        return Promise.resolve(cancelComputerTask());
+      }
+      return phoneCancelStream.apply(this, arguments);
     };
   }
 

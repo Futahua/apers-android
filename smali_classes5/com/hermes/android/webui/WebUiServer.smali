@@ -791,7 +791,7 @@
 
     move-result v0
 
-    const-string v3, "44"
+    const-string v3, "45"
 
     if-eqz v0, :cond_0
 
@@ -902,7 +902,7 @@
     invoke-virtual {p0}, Ljava/io/FileOutputStream;->close()V
 
     .line 91
-    const-string p0, "Webui assets seeded (rev 44)"
+    const-string p0, "Webui assets seeded (rev 45)"
 
     invoke-static {v4, p0}, Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I
 
