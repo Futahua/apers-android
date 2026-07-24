@@ -65,9 +65,10 @@
   // lets a retry reuse the shell a prior attempt already created.
   var preparingDesktopId = '';
   var desktopRetry = null;
-  var cachedDesktopSessions = readJson(DESKTOP_CATALOG_KEY, []);
-  var desktopSessions = Array.isArray(cachedDesktopSessions)
-    ? cachedDesktopSessions : [];
+  var cachedDesktopSessions = readJson(DESKTOP_CATALOG_KEY, {});
+  var desktopCatalog = Array.isArray(cachedDesktopSessions)
+    ? { legacy: { sessions: cachedDesktopSessions, fetchedAt: 0 } } : cachedDesktopSessions;
+  var desktopSessions = [];
   var sidebarMode = 'phone';
   var sidebarState = '';
   var sidebarStateIsError = false;
@@ -77,6 +78,80 @@
   var pickerHistory = false;
   var pendingBusyAction = null;
   var busyPickerBuilt = false;
+  var computerPeers = [];
+  var pollQueue = [];
+  var pollDevice = '';
+  var pollInFlight = false;
+  var pollStartedAt = 0;
+  var desktopListQueue = [];
+  var offlinePeers = {};
+
+  function peerId(peer) { return peer && String(peer.deviceId || '') || ''; }
+
+  function defaultDeviceId() {
+    return computerPeers.length ? peerId(computerPeers[0]) : '';
+  }
+
+  function peerLabel(deviceId) {
+    var peer = computerPeers.find(function (item) { return peerId(item) === deviceId; });
+    if (!peer) return deviceId || 'Computer';
+    var shortId = deviceId.length > 10 ? deviceId.slice(0, 10) : deviceId;
+    return String(peer.host || 'Computer') + ' · ' + shortId;
+  }
+
+  function catalogFor(deviceId) {
+    var entry = desktopCatalog && desktopCatalog[deviceId];
+    return entry && Array.isArray(entry.sessions) ? entry.sessions : [];
+  }
+
+  function saveDesktopCatalog() { writeJson(DESKTOP_CATALOG_KEY, desktopCatalog); }
+
+  function setDesktopCatalog(deviceId, sessions) {
+    if (!deviceId) deviceId = 'legacy';
+    desktopCatalog[deviceId] = { sessions: sessions, fetchedAt: Date.now() };
+    desktopSessions = Array.prototype.concat.apply([], Object.keys(desktopCatalog).map(function (id) {
+      return catalogFor(id).map(function (session) {
+        return Object.assign({}, session, { deviceId: id === 'legacy' ? '' : id });
+      });
+    }));
+    saveDesktopCatalog();
+  }
+
+  function migrateComputerState() {
+    var sole = defaultDeviceId();
+    Object.keys(bindings).forEach(function (sessionId) {
+      if (!bindings[sessionId] || bindings[sessionId].deviceId) return;
+      bindings[sessionId].deviceId = sole;
+    });
+    if (Array.isArray(cachedDesktopSessions)) {
+      desktopCatalog = {};
+      desktopCatalog[sole || 'legacy'] = { sessions: cachedDesktopSessions, fetchedAt: 0 };
+      saveDesktopCatalog();
+    }
+    desktopSessions = [];
+    Object.keys(desktopCatalog || {}).forEach(function (deviceId) {
+      catalogFor(deviceId).forEach(function (session) {
+        desktopSessions.push(Object.assign({}, session, {
+          deviceId: deviceId === 'legacy' ? '' : deviceId
+        }));
+      });
+    });
+    writeJson(BINDINGS_KEY, bindings);
+  }
+
+  function bindingDevice(sessionId) {
+    var binding = sessionId && bindings[sessionId];
+    return binding && binding.deviceId || defaultDeviceId();
+  }
+
+  function bridgeHasDeviceApi(host) {
+    return !!(host && typeof host.listComputerPeers === 'function' &&
+      typeof host.sendToComputerDevice === 'function');
+  }
+
+  function supportsDeviceRouting(host) {
+    return !!(host && typeof host.isComputerLinkedDevice === 'function');
+  }
 
   function bridge() {
     var candidate = window.ApersAndroid;
@@ -374,11 +449,12 @@
     }
   }
 
-  function refreshLinkStatus() {
+  function refreshLinkStatus(deviceId) {
     var host = bridge();
     try {
-      linked = !!(host && typeof host.isComputerLinked === 'function'
-        && host.isComputerLinked());
+      linked = !!(host && typeof host.isComputerLinked === 'function' &&
+        (deviceId && supportsDeviceRouting(host)
+          ? host.isComputerLinkedDevice(deviceId) : host.isComputerLinked()));
     } catch (_) {
       linked = false;
     }
@@ -432,6 +508,7 @@
     }
 
     var thread = readThread(sessionId);
+    var deviceId = bindingDevice(sessionId);
     thread.messages.push({
       role: 'user',
       content: text,
@@ -446,8 +523,12 @@
     if (typeof autoResize === 'function') autoResize();
     renderThread(sessionId);
     setComposerBusy(true, 'Sending to Hermes on your computer…');
-    dispatching[thread.conversationId] = sessionId;
-    host.sendToComputer(thread.conversationId, text);
+    dispatching[thread.conversationId] = { sessionId: sessionId, deviceId: deviceId };
+    if (typeof host.sendToComputerDevice === 'function' && deviceId) {
+      host.sendToComputerDevice(thread.conversationId, text, deviceId);
+    } else {
+      host.sendToComputer(thread.conversationId, text);
+    }
   }
 
   // Stop a running Desktop turn. Dispatches a cancel control op to the companion
@@ -459,17 +540,24 @@
     if (!isDesktopConversation(sessionId)) return false;
     var host = bridge();
     var conversation = conversationId(sessionId);
+    var deviceId = bindingDevice(sessionId);
     // Tell the PC to stop. This is a control op; if the bridge/link is down we
     // still settle locally below so the UI never gets stuck "busy".
-    if (host && typeof host.sendToComputer === 'function' && refreshLinkStatus()) {
+    if (host && typeof host.sendToComputer === 'function' && refreshLinkStatus(deviceId)) {
       controlRequests[CONTROL_CANCEL_ID] = {
         kind: 'cancel',
         sessionId: sessionId,
         conversationId: conversation,
         silent: true,
+        deviceId: deviceId,
         created: Date.now()
       };
-      host.sendToComputer(
+      if (typeof host.sendToComputerDevice === 'function' && deviceId) host.sendToComputerDevice(
+        CONTROL_CANCEL_ID,
+        CONTROL_CANCEL_PROMPT + '\n' + JSON.stringify({
+          conversation_id: conversation
+        }), deviceId);
+      else host.sendToComputer(
         CONTROL_CANCEL_ID,
         CONTROL_CANCEL_PROMPT + '\n' + JSON.stringify({
           conversation_id: conversation
@@ -559,7 +647,13 @@
     }
     renderUnifiedSidebar();
     if (sidebarMode === 'desktop') {
-      requestDesktopSessions(activeSessionId() || '__desktop_sidebar__');
+      var sidebarSession = activeSessionId() || '__desktop_sidebar__';
+      if (computerPeers.length > 1) {
+        desktopListQueue = computerPeers.map(peerId).filter(Boolean);
+        requestDesktopSessions(sidebarSession, desktopListQueue.shift());
+      } else {
+        requestDesktopSessions(sidebarSession);
+      }
     }
   }
 
@@ -794,10 +888,11 @@
     }
   }
 
-  function localShellForDesktop(desktopSessionId) {
+  function localShellForDesktop(desktopSessionId, deviceId) {
     return Object.keys(bindings).find(function (localId) {
       return bindings[localId] &&
         String(bindings[localId].id) === String(desktopSessionId) &&
+        (!deviceId || bindings[localId].deviceId === deviceId) &&
         isDesktopConversation(localId);
     }) || '';
   }
@@ -805,8 +900,9 @@
   function appendDesktopRow(list, session) {
     var row = document.createElement('div');
     row.className = 'session-item apers-unified-session apers-desktop-sidebar-session';
+    if (offlinePeers[session.deviceId]) row.classList.add('is-offline');
     row.dataset.desktopSessionId = session.id;
-    var localId = localShellForDesktop(session.id);
+    var localId = localShellForDesktop(session.id, session.deviceId);
     if (localId && localId === activeSessionId()) row.classList.add('active');
     var text = document.createElement('div');
     text.className = 'session-text';
@@ -822,7 +918,7 @@
     titleRow.appendChild(age);
     text.appendChild(titleRow);
     row.appendChild(text);
-    attachDesktopSessionGesture(row, session);
+    if (!offlinePeers[session.deviceId]) attachDesktopSessionGesture(row, session);
     list.appendChild(row);
   }
 
@@ -848,11 +944,14 @@
     }
     var groupsById = {};
     rows.forEach(function (session) {
-      var id = String(session.workspace_id || session.workspace || '');
+      var device = String(session.deviceId || '');
+      var workspace = String(session.workspace_id || session.workspace || '');
+      var id = device + '\u001f' + workspace;
       if (!groupsById[id]) {
         groupsById[id] = {
-          id: id,
-          name: String(session.workspace_name || 'Unassigned'),
+           id: id,
+           deviceId: device,
+           name: String(session.workspace_name || 'Unassigned'),
           rows: []
         };
       }
@@ -865,10 +964,19 @@
       var bi = projectOrder.indexOf(projectOrderId(b.id));
       if (ai < 0) ai = Number.MAX_SAFE_INTEGER;
       if (bi < 0) bi = Number.MAX_SAFE_INTEGER;
+      if (a.deviceId !== b.deviceId) return a.deviceId.localeCompare(b.deviceId);
       if (ai !== bi) return ai - bi;
       return a.name.localeCompare(b.name);
     });
+    var lastDeviceId = null;
     groups.forEach(function (group) {
+      if (computerPeers.length > 1 && group.deviceId !== lastDeviceId) {
+        var peerHeading = document.createElement('div');
+        peerHeading.className = 'apers-peer-group-heading';
+        peerHeading.textContent = peerLabel(group.deviceId);
+        list.appendChild(peerHeading);
+        lastDeviceId = group.deviceId;
+      }
       var wrapper = document.createElement('section');
       wrapper.className = 'apers-project-group apers-desktop-project-group';
       wrapper.dataset.desktopProjectId = group.id;
@@ -1316,7 +1424,7 @@
     attachManagedGesture(row, {
       click: function () {
         if (Date.now() < suppressSessionClickUntil) return;
-        openDesktopSession(session.id);
+         openDesktopSession(session.id, session.deviceId);
       },
       menu: function () { openDesktopSessionActions(session); }
     });
@@ -1551,20 +1659,16 @@
     ]);
   }
 
-  async function openDesktopSession(desktopSessionId) {
-    var localId = localShellForDesktop(desktopSessionId);
-    var host = bridge();
+  async function openDesktopSession(desktopSessionId, deviceId) {
+    var localId = localShellForDesktop(desktopSessionId, deviceId);
     if (localId) {
-      // DIAG A: cached-shell fast path taken.
-      if (host && typeof host.getHostKind === 'function') host.openOriginalApp();
       if (typeof loadSession === 'function') await loadSession(localId);
       renderThread(localId);
       closeSidebarIfOpen();
-      if (online) bindDesktopSession(desktopSessionId, true, localId);
+      if (online) bindDesktopSession(desktopSessionId, true, localId, deviceId);
       return;
     }
-    // DIAG B: no cached shell -> bind path. (No side effect; watch for "Preparing".)
-    bindDesktopSession(desktopSessionId, false);
+    bindDesktopSession(desktopSessionId, false, null, deviceId);
   }
 
   function installHermesEmptyState() {
@@ -1616,7 +1720,8 @@
         closeDesktopSessions();
       }
       var item = event.target.closest('[data-apers-session-id]');
-      if (item) bindDesktopSession(item.dataset.apersSessionId, false);
+      if (item) bindDesktopSession(item.dataset.apersSessionId, false, null,
+        item.dataset.apersDeviceId || '');
       if (event.target.closest('[data-apers-desktop-port]')) {
         portPhoneSession();
       }
@@ -1651,7 +1756,6 @@
   }
 
   function renderDesktopSessionList() {
-    writeJson(DESKTOP_CATALOG_KEY, desktopSessions);
     sidebarState = '';
     sidebarStateIsError = false;
     setDesktopRetry(null);
@@ -1675,12 +1779,26 @@
       showPickerState(query ? 'No matching Desktop sessions.' : 'No Desktop sessions yet.', false);
       return;
     }
+    var lastPeer = null;
     shown.forEach(function (session) {
+      if (computerPeers.length > 1 && session.deviceId !== lastPeer) {
+        var peerHeader = document.createElement('div');
+        peerHeader.className = 'apers-peer-group-heading';
+        peerHeader.textContent = peerLabel(session.deviceId);
+        list.appendChild(peerHeader);
+        lastPeer = session.deviceId;
+      }
       var row = document.createElement('button');
       row.type = 'button';
       row.className = 'apers-desktop-session';
+      if (offlinePeers[session.deviceId]) {
+        row.classList.add('is-offline');
+        row.disabled = true;
+      }
       row.dataset.apersSessionId = session.id;
-      if (selected && selected.id === session.id) row.classList.add('is-selected');
+      row.dataset.apersDeviceId = session.deviceId || '';
+      if (selected && selected.id === session.id &&
+          (!session.deviceId || selected.deviceId === session.deviceId)) row.classList.add('is-selected');
       var icon = document.createElement('span');
       icon.className = 'apers-desktop-session-icon';
       icon.textContent = selected && selected.id === session.id ? '✓' : '▢';
@@ -1699,6 +1817,39 @@
       row.appendChild(copy);
       row.appendChild(meta);
       list.appendChild(row);
+    });
+  }
+
+  function chooseComputerPeer() {
+    if (computerPeers.length < 2) return Promise.resolve(defaultDeviceId());
+    return new Promise(function (resolve) {
+      var backdrop = document.createElement('div');
+      backdrop.className = 'apers-peer-picker';
+      var panel = document.createElement('section');
+      panel.className = 'apers-peer-picker-panel';
+      var heading = document.createElement('strong');
+      heading.textContent = 'Choose a computer';
+      panel.appendChild(heading);
+      computerPeers.forEach(function (peer) {
+        var id = peerId(peer);
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'apers-peer-picker-item';
+        button.textContent = peerLabel(id);
+        button.onclick = function () { backdrop.remove(); resolve(id); };
+        panel.appendChild(button);
+      });
+      var cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'apers-peer-picker-cancel';
+      cancel.textContent = 'Cancel';
+      cancel.onclick = function () { backdrop.remove(); resolve(''); };
+      panel.appendChild(cancel);
+      backdrop.appendChild(panel);
+      backdrop.onclick = function (event) {
+        if (event.target === backdrop) { backdrop.remove(); resolve(''); }
+      };
+      document.body.appendChild(backdrop);
     });
   }
 
@@ -1732,7 +1883,8 @@
 
   function dispatchControl(conversation, kind, prompt, sessionId, extra) {
     var host = bridge();
-    if (!host || typeof host.sendToComputer !== 'function' || !refreshLinkStatus() ||
+    var deviceId = extra && extra.deviceId || bindingDevice(sessionId);
+    if (!host || typeof host.sendToComputer !== 'function' || !refreshLinkStatus(deviceId) ||
         (connectionChecked && !online)) {
       showPickerState('Hermes PC is unreachable.', true);
       return;
@@ -1741,23 +1893,34 @@
       kind: kind,
       sessionId: sessionId,
       conversationId: conversationId(sessionId),
+      deviceId: deviceId,
       created: Date.now()
     }, extra || {});
-    host.sendToComputer(conversation, prompt);
+    if (typeof host.sendToComputerDevice === 'function' && deviceId) {
+      host.sendToComputerDevice(conversation, prompt, deviceId);
+    } else {
+      host.sendToComputer(conversation, prompt);
+    }
   }
 
-  function requestDesktopSessions(sessionId) {
+  function requestDesktopSessions(sessionId, deviceId) {
+    deviceId = deviceId || bindingDevice(sessionId) || defaultDeviceId();
+    if (computerPeers.length > 1 && !deviceId) {
+      desktopListQueue = computerPeers.map(peerId).filter(Boolean);
+      deviceId = desktopListQueue.shift();
+    }
     dispatchControl(
       CONTROL_LIST_ID,
       'list',
       CONTROL_LIST_PROMPT + '\n' + JSON.stringify({
         conversation_id: conversationId(sessionId)
       }),
-      sessionId);
+       sessionId, { deviceId: deviceId });
   }
 
   function renameDesktopSession(desktopSessionId, title) {
     var owner = activeSessionId() || '__desktop_sidebar__';
+    var deviceId = bindingDevice(owner);
     dispatchControl(
       CONTROL_RENAME_ID,
       'rename',
@@ -1766,12 +1929,13 @@
         session_id: desktopSessionId,
         title: title
       }),
-      owner,
-      { desktopSessionId: desktopSessionId });
+       owner,
+       { desktopSessionId: desktopSessionId, deviceId: deviceId });
   }
 
   function archiveDesktopSession(desktopSessionId) {
     var owner = activeSessionId() || '__desktop_sidebar__';
+    var deviceId = bindingDevice(owner);
     dispatchControl(
       CONTROL_ARCHIVE_ID,
       'archive',
@@ -1780,17 +1944,17 @@
         session_id: desktopSessionId,
         archived: true
       }),
-      owner,
-      { desktopSessionId: desktopSessionId });
+       owner,
+       { desktopSessionId: desktopSessionId, deviceId: deviceId });
   }
 
-  async function ensureDesktopShell(desktopSessionId) {
+  async function ensureDesktopShell(desktopSessionId, deviceId) {
     // Reuse before create so a retry after a failed bind never orphans shells.
     // A prior attempt may have already minted a Desktop shell (via a successful
     // newSession that then failed at the bind stage) — that shell is the active
     // Desktop conversation and is reused here rather than duplicated.
     if (desktopSessionId) {
-      var existing = localShellForDesktop(desktopSessionId);
+      var existing = localShellForDesktop(desktopSessionId, deviceId);
       if (existing) return existing;
     }
     var current = activeSessionId();
@@ -1806,10 +1970,15 @@
     return sessionId;
   }
 
-  async function bindDesktopSession(desktopSessionId, silent, sessionOverride) {
+  async function bindDesktopSession(desktopSessionId, silent, sessionOverride, deviceOverride) {
     var sessionId = sessionOverride || activeSessionId();
+    var selected = desktopSessions.find(function (item) {
+      return String(item.id) === String(desktopSessionId) &&
+        (!deviceOverride || item.deviceId === deviceOverride);
+    });
+    var deviceId = deviceOverride || (selected && selected.deviceId) || bindingDevice(sessionId) || defaultDeviceId();
     if (!silent && !isDesktopConversation(sessionId)) {
-      if (!refreshLinkStatus()) {
+      if (!refreshLinkStatus(deviceId)) {
         showPickerState('Hermes PC is unreachable.', true);
         return;
       }
@@ -1820,7 +1989,7 @@
       setDesktopRetry(null);
       showPickerState('Preparing this Desktop conversation…', false);
       try {
-        sessionId = await ensureDesktopShell(desktopSessionId);
+        sessionId = await ensureDesktopShell(desktopSessionId, deviceId);
       } catch (err) {
         // A rejected/timed-out /api/session/new (phone backend) previously left
         // "Preparing…" on screen indefinitely. Surface a bounded, actionable
@@ -1866,13 +2035,18 @@
         session_id: desktopSessionId
       }),
       sessionId,
-      { desktopSessionId: desktopSessionId, silent: !!silent });
+         { desktopSessionId: desktopSessionId, silent: !!silent, deviceId: deviceId });
   }
 
   async function startNewDesktopSession() {
     var sessionId = activeSessionId();
+    var deviceId = bindingDevice(sessionId) || defaultDeviceId();
+    if (computerPeers.length > 1 && !isDesktopConversation(sessionId)) {
+      deviceId = await chooseComputerPeer();
+      if (!deviceId) return;
+    }
     if (!isDesktopConversation(sessionId)) {
-      if (!refreshLinkStatus()) {
+      if (!refreshLinkStatus(deviceId)) {
         showPickerState('Hermes PC is unreachable.', true);
         return;
       }
@@ -1886,7 +2060,7 @@
       CONTROL_NEW_PROMPT + '\n' + JSON.stringify({
         conversation_id: conversationId(sessionId)
       }),
-      sessionId);
+       sessionId, { deviceId: deviceId });
   }
 
   function boundedPhoneTranscript() {
@@ -1935,6 +2109,18 @@
       showPickerState('Send at least one message before moving this chat.', true);
       return;
     }
+    var deviceId = defaultDeviceId();
+    if (computerPeers.length > 1) {
+      chooseComputerPeer().then(function (chosen) {
+        if (chosen) dispatchControl(CONTROL_PORT_ID, 'port', CONTROL_PORT_PROMPT + '\n' + JSON.stringify({
+          conversation_id: conversationId(sessionId), port_id: conversationId(sessionId),
+          title: String(S.session && S.session.title || '').slice(0, 120),
+          model: String(S.session && S.session.model || '').slice(0, 160),
+          workspace: String(S.session && S.session.workspace || '').slice(0, 1024), messages: messages
+        }), sessionId, { deviceId: chosen });
+      });
+      return;
+    }
     showPickerState('Copying this conversation to Hermes PC…', false);
     dispatchControl(
       CONTROL_PORT_ID,
@@ -1947,7 +2133,7 @@
         workspace: String(S.session && S.session.workspace || '').slice(0, 1024),
         messages: messages
       }),
-      sessionId);
+       sessionId, { deviceId: deviceId });
   }
 
   function hasPendingControl(kind) {
@@ -2095,8 +2281,10 @@
       updateTargetUi();
       return;
     }
+    var dispatch = event && event.conversation_id
+      ? dispatching[event.conversation_id] : null;
     var sessionId = event && event.conversation_id
-      ? dispatching[event.conversation_id] || activeSessionId()
+      ? (dispatch && dispatch.sessionId || dispatch || activeSessionId())
       : activeSessionId();
     if (conversation) delete dispatching[conversation];
     if (!event || !event.ok || !event.id) {
@@ -2133,6 +2321,7 @@
     }
     pending[String(event.id)] = {
       sessionId: threadSessionId,
+      deviceId: dispatch && dispatch.deviceId || bindingDevice(threadSessionId),
       conversationId: thread.conversationId,
       created: Date.now(),
       worklog: { tools: {} }
@@ -2142,7 +2331,8 @@
     renderThread(threadSessionId);
   }
 
-  function onResults(payload) {
+  function onResults(payload, deviceId) {
+    deviceId = deviceId || pollDevice || '';
     online = true;
     connectionChecked = true;
     updateTargetUi();
@@ -2151,7 +2341,15 @@
     results.forEach(function (result) {
       var ref = String(result && result.ref || '');
       var owner = pending[ref];
-      if (!owner) return;
+      // Control requests are disposable UI plumbing. A result for a request
+      // that expired or pre-dates this WebView must be acknowledged so it does
+      // not download on every poll forever. Never discard an orphaned chat
+      // result: it may contain a real user-visible answer after an app restart.
+      if (!owner) {
+        if (isDesktopControlResult(result)) accepted.push(String(result.id));
+        return;
+      }
+      if (deviceId && owner.deviceId && owner.deviceId !== deviceId) return;
       if (owner.kind) {
         handleControlResult(owner, result);
         delete pending[ref];
@@ -2184,8 +2382,9 @@
       });
       saveThread(owner.sessionId, thread);
       if (result.session_id && !bindings[owner.sessionId]) {
-        bindings[owner.sessionId] = {
-          id: String(result.session_id),
+         bindings[owner.sessionId] = {
+           id: String(result.session_id),
+           deviceId: owner.deviceId || deviceId || defaultDeviceId(),
           title: 'Desktop conversation',
           source: 'desktop',
           last_active: Number(result.created) || Date.now() / 1000
@@ -2207,7 +2406,11 @@
       writeJson(PENDING_KEY, pending);
       var host = bridge();
       if (host && typeof host.ackComputerResults === 'function') {
-        host.ackComputerResults(JSON.stringify(accepted));
+         if (typeof host.ackComputerResultsDevice === 'function' && deviceId) {
+           host.ackComputerResultsDevice(JSON.stringify(accepted), deviceId);
+         } else {
+           host.ackComputerResults(JSON.stringify(accepted));
+         }
       }
     }
   }
@@ -2216,7 +2419,9 @@
     var remoteSession = value.session || {};
     sidebarMode = 'desktop';
     reflectSidebarMode();
-    bindings[owner.sessionId] = remoteSession;
+     bindings[owner.sessionId] = Object.assign({}, remoteSession, {
+       deviceId: owner.deviceId || remoteSession.deviceId || defaultDeviceId()
+     });
     markDesktopConversation(owner.sessionId);
     writeJson(BINDINGS_KEY, bindings);
     var thread = {
@@ -2268,6 +2473,10 @@
       value = { error: 'The Desktop returned an invalid response.' };
     }
     if (!result.ok || value.error) {
+      if (owner.kind === 'list' && owner.deviceId) {
+        offlinePeers[owner.deviceId] = true;
+        renderDesktopSessionList();
+      }
       if (!owner.silent) {
         if (owner.kind === 'bind') {
           var failedDesktopId = owner.desktopSessionId;
@@ -2281,15 +2490,18 @@
       return;
     }
     if (owner.kind === 'list') {
+      if (owner.deviceId) delete offlinePeers[owner.deviceId];
       desktopSessions = Array.isArray(value.sessions) ? value.sessions : [];
-      writeJson(DESKTOP_CATALOG_KEY, desktopSessions);
+      setDesktopCatalog(owner.deviceId, desktopSessions);
       var selectedId = String(value.selected_session_id || '');
       var selected = desktopSessions.find(function (session) {
         return session.id === selectedId;
       });
       var desktopOwner = isDesktopConversation(owner.sessionId);
       if (desktopOwner && selected) {
-        bindings[owner.sessionId] = selected;
+        bindings[owner.sessionId] = Object.assign({}, selected, {
+          deviceId: owner.deviceId || selected.deviceId || defaultDeviceId()
+        });
         writeJson(BINDINGS_KEY, bindings);
       } else if (desktopOwner && !selectedId && bindings[owner.sessionId]) {
         delete bindings[owner.sessionId];
@@ -2298,7 +2510,10 @@
       updateTargetUi();
       renderDesktopSessionList();
       if (desktopOwner && selected && !hasPendingControl('bind')) {
-        bindDesktopSession(selected.id, true, owner.sessionId);
+        bindDesktopSession(selected.id, true, owner.sessionId, owner.deviceId);
+      }
+      if (desktopListQueue.length) {
+        requestDesktopSessions(owner.sessionId, desktopListQueue.shift());
       }
       return;
     }
@@ -2349,7 +2564,11 @@
         return String(session.id) === renamedId;
       });
       if (renamed) renamed.title = String(value.title || renamed.title || '');
-      writeJson(DESKTOP_CATALOG_KEY, desktopSessions);
+      if (owner.deviceId) setDesktopCatalog(owner.deviceId, catalogFor(owner.deviceId).map(function (session) {
+        return String(session.id) === renamedId
+          ? Object.assign({}, session, { title: String(value.title || session.title || '') }) : session;
+      }));
+      else saveDesktopCatalog();
       if (typeof showToast === 'function') showToast('Desktop session renamed.', 2200);
       requestDesktopSessions(owner.sessionId || '__desktop_sidebar__');
       renderUnifiedSidebar();
@@ -2357,16 +2576,21 @@
     }
     if (owner.kind === 'archive') {
       var archivedId = String(value.session_id || owner.desktopSessionId || '');
-      desktopSessions = desktopSessions.filter(function (session) {
-        return String(session.id) !== archivedId;
-      });
+       desktopSessions = desktopSessions.filter(function (session) {
+         return String(session.id) !== archivedId;
+       });
+       if (owner.deviceId) setDesktopCatalog(owner.deviceId,
+         catalogFor(owner.deviceId).filter(function (session) {
+           return String(session.id) !== archivedId;
+         }));
       Object.keys(bindings).forEach(function (localId) {
-        if (bindings[localId] && String(bindings[localId].id) === archivedId) {
+        if (bindings[localId] && String(bindings[localId].id) === archivedId &&
+            (!owner.deviceId || bindings[localId].deviceId === owner.deviceId)) {
           delete bindings[localId];
         }
       });
       writeJson(BINDINGS_KEY, bindings);
-      writeJson(DESKTOP_CATALOG_KEY, desktopSessions);
+       saveDesktopCatalog();
       if (typeof showToast === 'function') showToast('Desktop session archived.', 2200);
       renderUnifiedSidebar();
       requestDesktopSessions(owner.sessionId || '__desktop_sidebar__');
@@ -2380,25 +2604,76 @@
     return newline < 0 ? '' : text.slice(newline + 1);
   }
 
-  function onPollError() {
-    online = false;
+  function isDesktopControlResult(result) {
+    var text = String(result && result.text || '');
+    if (text.indexOf(RESULT_PREFIX) !== 0) return false;
+    var headerEnd = text.indexOf('\n');
+    if (headerEnd < 0) return false;
+    return text.slice(RESULT_PREFIX.length, headerEnd).indexOf('__desktop_') === 0;
+  }
+
+  function startDevicePoll(deviceId, delay) {
+    pollDevice = deviceId;
+    pollInFlight = true;
+    pollStartedAt = Date.now();
+    window.setTimeout(function () {
+      try { bridge().pollComputerDevice(deviceId); } catch (_) { finishDevicePoll(); }
+    }, delay || 0);
+  }
+
+  function finishDevicePoll() {
+    pollInFlight = false;
+    pollStartedAt = 0;
+    pollDevice = '';
+    if (pollQueue.length) {
+      // Native posts its status callback before it clears computerPollRunning.
+      // A short handoff delay prevents the next PC's poll from losing that CAS race.
+      startDevicePoll(pollQueue.shift(), 150);
+    }
+  }
+
+  function onPollError(event) {
+    var failedDevice = pollDevice;
+    if (failedDevice) offlinePeers[failedDevice] = true;
+    if (!bindingDevice(activeSessionId()) || bindingDevice(activeSessionId()) === failedDevice) {
+      online = false;
+    }
     connectionChecked = true;
     updateTargetUi();
     if (sidebarMode === 'desktop') renderUnifiedSidebar();
+    if (pollInFlight) finishDevicePoll();
   }
 
   function onPollStatus(event) {
-    online = !!(event && event.ok);
+    var completedDevice = pollDevice;
+    if (completedDevice) delete offlinePeers[completedDevice];
+    if (!bindingDevice(activeSessionId()) || bindingDevice(activeSessionId()) === completedDevice) {
+      online = !!(event && event.ok);
+    }
     connectionChecked = true;
     updateTargetUi();
     if (sidebarMode === 'desktop') renderUnifiedSidebar();
+    if (pollInFlight) finishDevicePoll();
   }
 
   function pollComputer() {
     var host = bridge();
     if (!host || typeof host.pollComputer !== 'function') return;
-    if (!refreshLinkStatus()) return;
-    host.pollComputer();
+    if (!bridgeHasDeviceApi(host) || typeof host.pollComputerDevice !== 'function') {
+      if (!refreshLinkStatus()) return;
+      host.pollComputer();
+      return;
+    }
+    if (pollInFlight) {
+      if (Date.now() - pollStartedAt <= 15000) return;
+      // A native CAS drop has no callback. Let the next cycle rebuild the queue.
+      pollInFlight = false;
+      pollStartedAt = 0;
+      pollDevice = '';
+    }
+    pollQueue = computerPeers.map(peerId).filter(Boolean);
+    if (!pollQueue.length) return;
+    startDevicePoll(pollQueue.shift(), 0);
   }
 
   function revealAndroidActions() {
@@ -2667,9 +2942,29 @@
     busyPickerBuilt = true;
   }
 
+  function renderComputerPeerCount() {
+    // The peer count is represented by the Desktop picker, not a floating probe badge.
+  }
+
+  function refreshComputerPeers() {
+    var host = bridge();
+    if (!host || typeof host.listComputerPeers !== 'function') return;
+    try {
+      var parsed = JSON.parse(host.listComputerPeers() || '[]');
+      computerPeers = Array.isArray(parsed) ? parsed.filter(function (peer) {
+        return peer && peer.deviceId;
+      }) : [];
+    } catch (_) {
+      computerPeers = [];
+    }
+    updateTargetUi();
+  }
+
   function start() {
     localStorage.removeItem(LEGACY_TARGET_KEY);
     revealAndroidActions();
+    refreshComputerPeers();
+    migrateComputerState();
     buildBusyActionPicker();
     installUnifiedSidebar();
     installHermesEmptyState();
@@ -2695,6 +2990,7 @@
       }
       updateTargetUi();
       updateBusyPickerVisibility();
+      refreshComputerPeers();
       var binding = activeBinding();
       var normalPending = Object.keys(pending).some(function (id) {
         return pending[id] && !pending[id].kind;

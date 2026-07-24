@@ -781,6 +781,122 @@
     throw v2
 .end method
 
+.method public final ack(Ljava/util/List;Ljava/lang/String;)V
+    .locals 13
+    .annotation system Ldalvik/annotation/Signature;
+        value = {
+            "(",
+            "Ljava/util/List<",
+            "Ljava/lang/String;",
+            ">;",
+            "Ljava/lang/String;)V"
+        }
+    .end annotation
+
+    const-string v0, "ids"
+    invoke-static {p1, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+    invoke-virtual {p0, p2}, Lcom/hermes/android/mesh/MeshController;->brokerFor(Ljava/lang/String;)Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;
+    move-result-object v0
+    if-nez v0, :cond_a0
+    return-void
+
+    :cond_a0
+    new-instance v1, Ljava/util/LinkedHashSet;
+    invoke-direct {v1}, Ljava/util/LinkedHashSet;-><init>()V
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getHost()Ljava/lang/String;
+    move-result-object v2
+    invoke-virtual {v1, v2}, Ljava/util/LinkedHashSet;->add(Ljava/lang/Object;)Z
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getAlts()Ljava/util/List;
+    move-result-object v2
+    check-cast v2, Ljava/util/Collection;
+    invoke-virtual {v1, v2}, Ljava/util/LinkedHashSet;->addAll(Ljava/util/Collection;)Z
+    new-instance v2, Ljava/util/LinkedHashSet;
+    invoke-direct {v2}, Ljava/util/LinkedHashSet;-><init>()V
+    invoke-static {p0}, Lcom/hermes/android/mesh/MeshController;->access$getLastGood$p(Lcom/hermes/android/mesh/MeshController;)Lkotlin/Pair;
+    move-result-object v3
+    if-eqz v3, :cond_a1
+    invoke-virtual {v3}, Lkotlin/Pair;->component1()Ljava/lang/Object;
+    move-result-object v4
+    check-cast v4, Ljava/lang/String;
+    invoke-virtual {v3}, Lkotlin/Pair;->component2()Ljava/lang/Object;
+    move-result-object v3
+    check-cast v3, Ljava/lang/String;
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getDeviceId()Ljava/lang/String;
+    move-result-object v5
+    invoke-static {v4, v5}, Lkotlin/jvm/internal/Intrinsics;->areEqual(Ljava/lang/Object;Ljava/lang/Object;)Z
+    move-result v4
+    if-eqz v4, :cond_a1
+    invoke-virtual {v1, v3}, Ljava/util/LinkedHashSet;->contains(Ljava/lang/Object;)Z
+    move-result v4
+    if-eqz v4, :cond_a1
+    invoke-virtual {v2, v3}, Ljava/util/LinkedHashSet;->add(Ljava/lang/Object;)Z
+
+    :cond_a1
+    check-cast v1, Ljava/util/Collection;
+    invoke-virtual {v2, v1}, Ljava/util/LinkedHashSet;->addAll(Ljava/util/Collection;)Z
+    sget-object v1, Lcom/hermes/android/mesh/HostFailover;->INSTANCE:Lcom/hermes/android/mesh/HostFailover;
+    check-cast v2, Ljava/lang/Iterable;
+    invoke-static {v2}, Lkotlin/collections/CollectionsKt;->toList(Ljava/lang/Iterable;)Ljava/util/List;
+    move-result-object v1
+    invoke-interface {v1}, Ljava/util/List;->iterator()Ljava/util/Iterator;
+    move-result-object v1
+    const/4 v2, 0x0
+
+    :goto_a0
+    invoke-interface {v1}, Ljava/util/Iterator;->hasNext()Z
+    move-result v3
+    if-eqz v3, :cond_a3
+    invoke-interface {v1}, Ljava/util/Iterator;->next()Ljava/lang/Object;
+    move-result-object v2
+    check-cast v2, Ljava/lang/String;
+    :try_start_a0
+    iget-object v3, p0, Lcom/hermes/android/mesh/MeshController;->client:Lcom/hermes/android/mesh/MeshClient;
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getPort()I
+    move-result v5
+    invoke-virtual {p0}, Lcom/hermes/android/mesh/MeshController;->getIdentity()Lcom/hermes/android/handoff/HandoffCrypto$KeyPair;
+    move-result-object v4
+    invoke-virtual {v4}, Lcom/hermes/android/handoff/HandoffCrypto$KeyPair;->getSecretKey()[B
+    move-result-object v6
+    invoke-virtual {p0}, Lcom/hermes/android/mesh/MeshController;->getIdentity()Lcom/hermes/android/handoff/HandoffCrypto$KeyPair;
+    move-result-object v4
+    invoke-virtual {v4}, Lcom/hermes/android/handoff/HandoffCrypto$KeyPair;->getPublicKey()[B
+    move-result-object v7
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getPublicKey()[B
+    move-result-object v8
+    const/16 v11, 0x40
+    const/4 v12, 0x0
+    const/4 v10, 0x0
+    move-object v4, v2
+    move-object v9, p1
+    invoke-static/range {v3 .. v12}, Lcom/hermes/android/mesh/MeshClient;->ack$default(Lcom/hermes/android/mesh/MeshClient;Ljava/lang/String;I[B[B[BLjava/util/List;IILjava/lang/Object;)V
+    :try_end_a0
+    .catch Ljava/io/IOException; {:try_start_a0 .. :try_end_a0} :catch_a0
+    sget-object p1, Lkotlin/Unit;->INSTANCE:Lkotlin/Unit;
+    if-eqz v2, :cond_a2
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getDeviceId()Ljava/lang/String;
+    move-result-object p1
+    invoke-static {p1, v2}, Lkotlin/TuplesKt;->to(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;
+    move-result-object p1
+    invoke-static {p0, p1}, Lcom/hermes/android/mesh/MeshController;->access$setLastGood$p(Lcom/hermes/android/mesh/MeshController;Lkotlin/Pair;)V
+    :cond_a2
+    return-void
+    :catch_a0
+    move-exception v2
+    goto :goto_a0
+    :cond_a3
+    if-eqz v2, :cond_a4
+    check-cast v2, Ljava/lang/Throwable;
+    goto :goto_a1
+    :cond_a4
+    new-instance p1, Ljava/io/IOException;
+    const-string v0, "no reachable host"
+    invoke-direct {p1, v0}, Ljava/io/IOException;-><init>(Ljava/lang/String;)V
+    move-object v2, p1
+    check-cast v2, Ljava/lang/Throwable;
+    :goto_a1
+    throw v2
+.end method
+
 .method public final broker()Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;
     .locals 1
 
@@ -796,6 +912,27 @@
     move-result-object v0
 
     check-cast v0, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;
+
+    return-object v0
+.end method
+
+.method public final brokerFor(Ljava/lang/String;)Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;
+    .locals 1
+
+    if-eqz p1, :cond_bf_broker
+
+    iget-object v0, p0, Lcom/hermes/android/mesh/MeshController;->peers:Lcom/hermes/android/handoff/HandoffPeerStore;
+
+    invoke-virtual {v0, p1}, Lcom/hermes/android/handoff/HandoffPeerStore;->get(Ljava/lang/String;)Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;
+
+    move-result-object v0
+
+    return-object v0
+
+    :cond_bf_broker
+    invoke-virtual {p0}, Lcom/hermes/android/mesh/MeshController;->broker()Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;
+
+    move-result-object v0
 
     return-object v0
 .end method
@@ -1020,6 +1157,123 @@
     throw p1
 .end method
 
+.method public final dispatch(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+    .locals 13
+
+    const-string v0, "prompt"
+    invoke-static {p1, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+    invoke-virtual {p0, p2}, Lcom/hermes/android/mesh/MeshController;->brokerFor(Ljava/lang/String;)Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;
+    move-result-object v0
+    if-eqz v0, :cond_d4
+
+    new-instance v1, Ljava/util/LinkedHashSet;
+    invoke-direct {v1}, Ljava/util/LinkedHashSet;-><init>()V
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getHost()Ljava/lang/String;
+    move-result-object v2
+    invoke-virtual {v1, v2}, Ljava/util/LinkedHashSet;->add(Ljava/lang/Object;)Z
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getAlts()Ljava/util/List;
+    move-result-object v2
+    check-cast v2, Ljava/util/Collection;
+    invoke-virtual {v1, v2}, Ljava/util/LinkedHashSet;->addAll(Ljava/util/Collection;)Z
+
+    new-instance v2, Ljava/util/LinkedHashSet;
+    invoke-direct {v2}, Ljava/util/LinkedHashSet;-><init>()V
+    invoke-static {p0}, Lcom/hermes/android/mesh/MeshController;->access$getLastGood$p(Lcom/hermes/android/mesh/MeshController;)Lkotlin/Pair;
+    move-result-object v3
+    if-eqz v3, :cond_d0
+    invoke-virtual {v3}, Lkotlin/Pair;->component1()Ljava/lang/Object;
+    move-result-object v4
+    check-cast v4, Ljava/lang/String;
+    invoke-virtual {v3}, Lkotlin/Pair;->component2()Ljava/lang/Object;
+    move-result-object v3
+    check-cast v3, Ljava/lang/String;
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getDeviceId()Ljava/lang/String;
+    move-result-object v5
+    invoke-static {v4, v5}, Lkotlin/jvm/internal/Intrinsics;->areEqual(Ljava/lang/Object;Ljava/lang/Object;)Z
+    move-result v4
+    if-eqz v4, :cond_d0
+    invoke-virtual {v1, v3}, Ljava/util/LinkedHashSet;->contains(Ljava/lang/Object;)Z
+    move-result v4
+    if-eqz v4, :cond_d0
+    invoke-virtual {v2, v3}, Ljava/util/LinkedHashSet;->add(Ljava/lang/Object;)Z
+
+    :cond_d0
+    check-cast v1, Ljava/util/Collection;
+    invoke-virtual {v2, v1}, Ljava/util/LinkedHashSet;->addAll(Ljava/util/Collection;)Z
+    sget-object v1, Lcom/hermes/android/mesh/HostFailover;->INSTANCE:Lcom/hermes/android/mesh/HostFailover;
+    check-cast v2, Ljava/lang/Iterable;
+    invoke-static {v2}, Lkotlin/collections/CollectionsKt;->toList(Ljava/lang/Iterable;)Ljava/util/List;
+    move-result-object v1
+    invoke-interface {v1}, Ljava/util/List;->iterator()Ljava/util/Iterator;
+    move-result-object v1
+    const/4 v2, 0x0
+
+    :goto_d0
+    invoke-interface {v1}, Ljava/util/Iterator;->hasNext()Z
+    move-result v3
+    if-eqz v3, :cond_d2
+    invoke-interface {v1}, Ljava/util/Iterator;->next()Ljava/lang/Object;
+    move-result-object v2
+    check-cast v2, Ljava/lang/String;
+    :try_start_d0
+    iget-object v3, p0, Lcom/hermes/android/mesh/MeshController;->client:Lcom/hermes/android/mesh/MeshClient;
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getPort()I
+    move-result v5
+    invoke-virtual {p0}, Lcom/hermes/android/mesh/MeshController;->getIdentity()Lcom/hermes/android/handoff/HandoffCrypto$KeyPair;
+    move-result-object v4
+    invoke-virtual {v4}, Lcom/hermes/android/handoff/HandoffCrypto$KeyPair;->getSecretKey()[B
+    move-result-object v6
+    invoke-virtual {p0}, Lcom/hermes/android/mesh/MeshController;->getIdentity()Lcom/hermes/android/handoff/HandoffCrypto$KeyPair;
+    move-result-object v4
+    invoke-virtual {v4}, Lcom/hermes/android/handoff/HandoffCrypto$KeyPair;->getPublicKey()[B
+    move-result-object v7
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getPublicKey()[B
+    move-result-object v8
+    const/16 v11, 0x40
+    const/4 v12, 0x0
+    const/4 v10, 0x0
+    move-object v4, v2
+    move-object v9, p1
+    invoke-static/range {v3 .. v12}, Lcom/hermes/android/mesh/MeshClient;->push$default(Lcom/hermes/android/mesh/MeshClient;Ljava/lang/String;I[B[B[BLjava/lang/String;IILjava/lang/Object;)Ljava/lang/String;
+    move-result-object p1
+    :try_end_d0
+    .catch Ljava/io/IOException; {:try_start_d0 .. :try_end_d0} :catch_d0
+    if-eqz v2, :cond_d1
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getDeviceId()Ljava/lang/String;
+    move-result-object v0
+    invoke-static {v0, v2}, Lkotlin/TuplesKt;->to(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;
+    move-result-object v0
+    invoke-static {p0, v0}, Lcom/hermes/android/mesh/MeshController;->access$setLastGood$p(Lcom/hermes/android/mesh/MeshController;Lkotlin/Pair;)V
+    :cond_d1
+    return-object p1
+    :catch_d0
+    move-exception v2
+    goto :goto_d0
+    :cond_d2
+    if-eqz v2, :cond_d3
+    check-cast v2, Ljava/lang/Throwable;
+    goto :goto_d1
+    :cond_d3
+    new-instance p1, Ljava/io/IOException;
+    const-string v0, "no reachable host"
+    invoke-direct {p1, v0}, Ljava/io/IOException;-><init>(Ljava/lang/String;)V
+    move-object v2, p1
+    check-cast v2, Ljava/lang/Throwable;
+    :goto_d1
+    throw v2
+    :cond_d4
+    new-instance p1, Lcom/hermes/android/mesh/MeshClient$MeshException;
+    sget v5, Lcom/hermes/android/R$string;->mesh_err_not_linked:I
+    const/4 v7, 0x4
+    const/4 v8, 0x0
+    const-string v4, "no computer linked"
+    const/4 v6, 0x0
+    move-object v3, p1
+    invoke-direct/range {v3 .. v8}, Lcom/hermes/android/mesh/MeshClient$MeshException;-><init>(Ljava/lang/String;I[Ljava/lang/Object;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+    throw p1
+.end method
+
 .method public final getIdentity()Lcom/hermes/android/handoff/HandoffCrypto$KeyPair;
     .locals 1
 
@@ -1044,6 +1298,76 @@
     return-object v0
 .end method
 
+.method public final peersJson()Ljava/lang/String;
+    .locals 7
+
+    new-instance v0, Lorg/json/JSONArray;
+
+    invoke-direct {v0}, Lorg/json/JSONArray;-><init>()V
+
+    iget-object v1, p0, Lcom/hermes/android/mesh/MeshController;->peers:Lcom/hermes/android/handoff/HandoffPeerStore;
+
+    invoke-virtual {v1}, Lcom/hermes/android/handoff/HandoffPeerStore;->all()Ljava/util/List;
+
+    move-result-object v1
+
+    invoke-interface {v1}, Ljava/util/List;->iterator()Ljava/util/Iterator;
+
+    move-result-object v1
+
+    :loop_pj
+    invoke-interface {v1}, Ljava/util/Iterator;->hasNext()Z
+
+    move-result v2
+
+    if-eqz v2, :done_pj
+
+    invoke-interface {v1}, Ljava/util/Iterator;->next()Ljava/lang/Object;
+
+    move-result-object v3
+
+    check-cast v3, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;
+
+    new-instance v4, Lorg/json/JSONObject;
+
+    invoke-direct {v4}, Lorg/json/JSONObject;-><init>()V
+
+    const-string v5, "deviceId"
+
+    invoke-virtual {v3}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getDeviceId()Ljava/lang/String;
+
+    move-result-object v6
+
+    invoke-virtual {v4, v5, v6}, Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;
+
+    const-string v5, "host"
+
+    invoke-virtual {v3}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getHost()Ljava/lang/String;
+
+    move-result-object v6
+
+    invoke-virtual {v4, v5, v6}, Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;
+
+    const-string v5, "port"
+
+    invoke-virtual {v3}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getPort()I
+
+    move-result v6
+
+    invoke-virtual {v4, v5, v6}, Lorg/json/JSONObject;->put(Ljava/lang/String;I)Lorg/json/JSONObject;
+
+    invoke-virtual {v0, v4}, Lorg/json/JSONArray;->put(Ljava/lang/Object;)Lorg/json/JSONArray;
+
+    goto :loop_pj
+
+    :done_pj
+    invoke-virtual {v0}, Lorg/json/JSONArray;->toString()Ljava/lang/String;
+
+    move-result-object v0
+
+    return-object v0
+.end method
+
 .method public final isPaired()Z
     .locals 1
 
@@ -1063,6 +1387,141 @@
 
     :goto_0
     return v0
+.end method
+
+.method public final isPaired(Ljava/lang/String;)Z
+    .locals 1
+
+    invoke-virtual {p0, p1}, Lcom/hermes/android/mesh/MeshController;->brokerFor(Ljava/lang/String;)Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;
+
+    move-result-object v0
+
+    if-eqz v0, :cond_0
+
+    const/4 v0, 0x1
+
+    goto :goto_0
+
+    :cond_0
+    const/4 v0, 0x0
+
+    :goto_0
+    return v0
+.end method
+
+.method public final poll(Ljava/lang/String;)Ljava/util/List;
+    .locals 12
+    .annotation system Ldalvik/annotation/Signature;
+        value = {
+            "(",
+            "Ljava/lang/String;)",
+            "Ljava/util/List<",
+            "Lcom/hermes/android/mesh/MeshClient$Result;",
+            ">;"
+        }
+    .end annotation
+
+    invoke-virtual {p0, p1}, Lcom/hermes/android/mesh/MeshController;->brokerFor(Ljava/lang/String;)Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;
+    move-result-object v0
+    if-nez v0, :cond_p0
+    invoke-static {}, Lkotlin/collections/CollectionsKt;->emptyList()Ljava/util/List;
+    move-result-object v0
+    return-object v0
+
+    :cond_p0
+    new-instance v1, Ljava/util/LinkedHashSet;
+    invoke-direct {v1}, Ljava/util/LinkedHashSet;-><init>()V
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getHost()Ljava/lang/String;
+    move-result-object v2
+    invoke-virtual {v1, v2}, Ljava/util/LinkedHashSet;->add(Ljava/lang/Object;)Z
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getAlts()Ljava/util/List;
+    move-result-object v2
+    check-cast v2, Ljava/util/Collection;
+    invoke-virtual {v1, v2}, Ljava/util/LinkedHashSet;->addAll(Ljava/util/Collection;)Z
+    new-instance v2, Ljava/util/LinkedHashSet;
+    invoke-direct {v2}, Ljava/util/LinkedHashSet;-><init>()V
+    invoke-static {p0}, Lcom/hermes/android/mesh/MeshController;->access$getLastGood$p(Lcom/hermes/android/mesh/MeshController;)Lkotlin/Pair;
+    move-result-object v3
+    if-eqz v3, :cond_p1
+    invoke-virtual {v3}, Lkotlin/Pair;->component1()Ljava/lang/Object;
+    move-result-object v4
+    check-cast v4, Ljava/lang/String;
+    invoke-virtual {v3}, Lkotlin/Pair;->component2()Ljava/lang/Object;
+    move-result-object v3
+    check-cast v3, Ljava/lang/String;
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getDeviceId()Ljava/lang/String;
+    move-result-object v5
+    invoke-static {v4, v5}, Lkotlin/jvm/internal/Intrinsics;->areEqual(Ljava/lang/Object;Ljava/lang/Object;)Z
+    move-result v4
+    if-eqz v4, :cond_p1
+    invoke-virtual {v1, v3}, Ljava/util/LinkedHashSet;->contains(Ljava/lang/Object;)Z
+    move-result v4
+    if-eqz v4, :cond_p1
+    invoke-virtual {v2, v3}, Ljava/util/LinkedHashSet;->add(Ljava/lang/Object;)Z
+
+    :cond_p1
+    check-cast v1, Ljava/util/Collection;
+    invoke-virtual {v2, v1}, Ljava/util/LinkedHashSet;->addAll(Ljava/util/Collection;)Z
+    sget-object v1, Lcom/hermes/android/mesh/HostFailover;->INSTANCE:Lcom/hermes/android/mesh/HostFailover;
+    check-cast v2, Ljava/lang/Iterable;
+    invoke-static {v2}, Lkotlin/collections/CollectionsKt;->toList(Ljava/lang/Iterable;)Ljava/util/List;
+    move-result-object v1
+    invoke-interface {v1}, Ljava/util/List;->iterator()Ljava/util/Iterator;
+    move-result-object v1
+    const/4 v2, 0x0
+
+    :goto_p0
+    invoke-interface {v1}, Ljava/util/Iterator;->hasNext()Z
+    move-result v3
+    if-eqz v3, :cond_p3
+    invoke-interface {v1}, Ljava/util/Iterator;->next()Ljava/lang/Object;
+    move-result-object v2
+    check-cast v2, Ljava/lang/String;
+    :try_start_p0
+    iget-object v3, p0, Lcom/hermes/android/mesh/MeshController;->client:Lcom/hermes/android/mesh/MeshClient;
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getPort()I
+    move-result v5
+    invoke-virtual {p0}, Lcom/hermes/android/mesh/MeshController;->getIdentity()Lcom/hermes/android/handoff/HandoffCrypto$KeyPair;
+    move-result-object v4
+    invoke-virtual {v4}, Lcom/hermes/android/handoff/HandoffCrypto$KeyPair;->getSecretKey()[B
+    move-result-object v6
+    invoke-virtual {p0}, Lcom/hermes/android/mesh/MeshController;->getIdentity()Lcom/hermes/android/handoff/HandoffCrypto$KeyPair;
+    move-result-object v4
+    invoke-virtual {v4}, Lcom/hermes/android/handoff/HandoffCrypto$KeyPair;->getPublicKey()[B
+    move-result-object v7
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getPublicKey()[B
+    move-result-object v8
+    const/16 v10, 0x20
+    const/4 v11, 0x0
+    const/4 v9, 0x0
+    move-object v4, v2
+    invoke-static/range {v3 .. v11}, Lcom/hermes/android/mesh/MeshClient;->poll$default(Lcom/hermes/android/mesh/MeshClient;Ljava/lang/String;I[B[B[BIILjava/lang/Object;)Ljava/util/List;
+    move-result-object v1
+    :try_end_p0
+    .catch Ljava/io/IOException; {:try_start_p0 .. :try_end_p0} :catch_p0
+    if-eqz v2, :cond_p2
+    invoke-virtual {v0}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getDeviceId()Ljava/lang/String;
+    move-result-object v0
+    invoke-static {v0, v2}, Lkotlin/TuplesKt;->to(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;
+    move-result-object v0
+    invoke-static {p0, v0}, Lcom/hermes/android/mesh/MeshController;->access$setLastGood$p(Lcom/hermes/android/mesh/MeshController;Lkotlin/Pair;)V
+    :cond_p2
+    return-object v1
+    :catch_p0
+    move-exception v2
+    goto :goto_p0
+    :cond_p3
+    if-eqz v2, :cond_p4
+    check-cast v2, Ljava/lang/Throwable;
+    goto :goto_p1
+    :cond_p4
+    new-instance v0, Ljava/io/IOException;
+    const-string v1, "no reachable host"
+    invoke-direct {v0, v1}, Ljava/io/IOException;-><init>(Ljava/lang/String;)V
+    move-object v2, v0
+    check-cast v2, Ljava/lang/Throwable;
+    :goto_p1
+    throw v2
 .end method
 
 .method public final pairFromQr(Ljava/lang/String;)Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;

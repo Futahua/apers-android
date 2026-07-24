@@ -595,6 +595,12 @@ button.apers-sidebar-state-retry:active {
   color: var(--accent-text);
 }
 
+.apers-desktop-session.is-offline,
+.apers-desktop-sidebar-session.is-offline {
+  cursor: not-allowed;
+  opacity: .52;
+}
+
 .apers-desktop-session-icon {
   align-items: center;
   border: 1px solid var(--border2);
@@ -683,6 +689,73 @@ button.apers-sidebar-state-retry:active {
 
 .apers-desktop-picker-state.is-error {
   color: var(--accent-text);
+}
+
+.apers-peer-group-heading {
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .08em;
+  padding: 12px 8px 5px;
+  text-transform: uppercase;
+}
+
+.apers-peer-picker {
+  align-items: center;
+  background: rgba(30, 28, 24, .2);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 18px;
+  position: fixed;
+  z-index: 10030;
+}
+
+.apers-peer-picker-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 18px 52px rgba(28, 25, 20, .18);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 360px;
+  padding: 14px;
+  width: 100%;
+}
+
+.apers-peer-picker-panel > strong {
+  color: var(--strong);
+  font-size: 15px;
+  padding: 3px 5px 8px;
+}
+
+.apers-peer-picker-item,
+.apers-peer-picker-cancel {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  min-height: 44px;
+  padding: 9px 11px;
+  text-align: left;
+}
+
+.apers-peer-picker-item:hover,
+.apers-peer-picker-item:focus-visible {
+  background: var(--accent-bg);
+  border-color: var(--accent-text);
+  outline: none;
+}
+
+.apers-peer-picker-cancel {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  margin-top: 3px;
+  text-align: center;
 }
 
 @media (max-width: 640px) {
