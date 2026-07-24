@@ -177,7 +177,10 @@ The integrated transport has previously demonstrated:
 - pickup of an existing Desktop session;
 - Desktop-side reconciliation of externally written sessions;
 - persistent remote tool calls and results rendered as the phone's ordinary worklog;
-- conversation rename and archive from the phone.
+- conversation rename and archive from the phone;
+- multiple paired PCs: per-conversation routing, friendly names, presence,
+  add/unpair, and a conversation whose PC is offline staying read-only without
+  ever silently rebinding onto a different PC's conversation.
 
 These are regression requirements, not open implementation tasks.
 

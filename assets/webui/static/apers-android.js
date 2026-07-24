@@ -1952,11 +1952,16 @@
       }
       row.dataset.apersSessionId = session.id;
       row.dataset.apersDeviceId = session.deviceId || '';
-      if (selected && selected.id === session.id &&
-          (!session.deviceId || selected.deviceId === session.deviceId)) row.classList.add('is-selected');
+      // Session ids are assigned per-PC, not globally unique, so two different
+      // computers can have a session sharing the same id — every comparison
+      // against `selected` must also match deviceId, or picking a session on
+      // one PC marks a same-id session on a different PC as selected too.
+      var isSelectedRow = !!(selected && selected.id === session.id &&
+        (!session.deviceId || selected.deviceId === session.deviceId));
+      if (isSelectedRow) row.classList.add('is-selected');
       var icon = document.createElement('span');
       icon.className = 'apers-desktop-session-icon';
-      icon.textContent = selected && selected.id === session.id ? '✓' : '▢';
+      icon.textContent = isSelectedRow ? '✓' : '▢';
       var copy = document.createElement('span');
       copy.className = 'apers-desktop-session-copy';
       var title = document.createElement('strong');
@@ -2918,8 +2923,12 @@
     }
     if (owner.kind === 'rename') {
       var renamedId = String(value.session_id || owner.desktopSessionId || '');
+      // Session ids are per-PC, not global: without the deviceId guard, renaming
+      // a session on one PC retitles any other PC's session that happens to
+      // share the same id.
       var renamed = desktopSessions.find(function (session) {
-        return String(session.id) === renamedId;
+        return String(session.id) === renamedId &&
+          (!owner.deviceId || session.deviceId === owner.deviceId);
       });
       if (renamed) renamed.title = String(value.title || renamed.title || '');
       if (owner.deviceId) setDesktopCatalog(owner.deviceId, catalogFor(owner.deviceId).map(function (session) {
@@ -2934,13 +2943,17 @@
     }
     if (owner.kind === 'archive') {
       var archivedId = String(value.session_id || owner.desktopSessionId || '');
-       desktopSessions = desktopSessions.filter(function (session) {
-         return String(session.id) !== archivedId;
-       });
-       if (owner.deviceId) setDesktopCatalog(owner.deviceId,
-         catalogFor(owner.deviceId).filter(function (session) {
-           return String(session.id) !== archivedId;
-         }));
+      // Session ids are per-PC: filtering desktopSessions directly (without a
+      // deviceId guard) would drop any OTHER PC's session sharing this id too.
+      // setDesktopCatalog rebuilds the full merged array from the catalog, so
+      // let it own desktopSessions rather than filtering it here as well.
+      if (owner.deviceId) setDesktopCatalog(owner.deviceId,
+        catalogFor(owner.deviceId).filter(function (session) {
+          return String(session.id) !== archivedId;
+        }));
+      else desktopSessions = desktopSessions.filter(function (session) {
+        return String(session.id) !== archivedId;
+      });
       Object.keys(bindings).forEach(function (localId) {
         if (bindings[localId] && String(bindings[localId].id) === archivedId &&
             (!owner.deviceId || bindings[localId].deviceId === owner.deviceId)) {
