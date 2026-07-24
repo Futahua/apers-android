@@ -32,6 +32,21 @@
   var lastActiveSessionId = null;
   var lastDesktopSync = 0;
   var pending = readJson(PENDING_KEY, {});
+  // Control requests (bind/list/new/port/rename/archive) are in-flight companion
+  // round-trips; they are meaningless across a restart because the companion
+  // exchange that would resolve them is already gone. A persisted control entry
+  // — especially a bind — otherwise keeps hasPendingControl() true forever and
+  // silently blocks every Desktop selection. Drop them at load; keep only real
+  // task-result entries (no .kind) awaiting delivery.
+  (function purgePersistedControlRequests() {
+    var changed = false;
+    Object.keys(pending).forEach(function (id) {
+      if (pending[id] && pending[id].kind) { delete pending[id]; changed = true; }
+    });
+    if (changed) {
+      try { localStorage.setItem(PENDING_KEY, JSON.stringify(pending)); } catch (_) {}
+    }
+  })();
   var bindings = readJson(BINDINGS_KEY, {});
   var routes = readJson(ROUTES_KEY, {});
   var dispatching = {};
@@ -1473,13 +1488,17 @@
 
   async function openDesktopSession(desktopSessionId) {
     var localId = localShellForDesktop(desktopSessionId);
+    var host = bridge();
     if (localId) {
+      // DIAG A: cached-shell fast path taken.
+      if (host && typeof host.getHostKind === 'function') host.openOriginalApp();
       if (typeof loadSession === 'function') await loadSession(localId);
       renderThread(localId);
       closeSidebarIfOpen();
       if (online) bindDesktopSession(desktopSessionId, true, localId);
       return;
     }
+    // DIAG B: no cached shell -> bind path. (No side effect; watch for "Preparing".)
     bindDesktopSession(desktopSessionId, false);
   }
 
@@ -1752,6 +1771,15 @@
       }
       preparingDesktopId = '';
     }
+    // A user-initiated selection must not be blocked by a stale/silent bind that
+    // is still sitting in the pending map (e.g. a background auto-rebind whose
+    // result never arrived, possibly persisted across restarts). Clear any
+    // outstanding bind requests before dispatching this one, so the newest
+    // explicit selection always wins. Silent auto-rebinds still defer to an
+    // in-flight bind.
+    if (!silent) {
+      dropControlRequests('bind');
+    }
     if (!sessionId || hasPendingControl('bind')) {
       // A bind is already in flight (e.g. a silent auto-rebind); do not stack a
       // second dispatch. The in-flight bind owns the loading state, so clear any
@@ -1865,6 +1893,27 @@
     });
   }
 
+  // Forget outstanding control requests of a kind (both stages: awaiting dispatch
+  // in controlRequests, and awaiting result in pending). Used so a fresh
+  // user-initiated selection is never blocked by an earlier control op — most
+  // importantly a stale bind, which otherwise persists in localStorage and makes
+  // hasPendingControl('bind') true forever, silently swallowing every tap.
+  function dropControlRequests(kind) {
+    var changed = false;
+    Object.keys(controlRequests).forEach(function (id) {
+      if (controlRequests[id] && controlRequests[id].kind === kind) {
+        delete controlRequests[id];
+      }
+    });
+    Object.keys(pending).forEach(function (id) {
+      if (pending[id] && pending[id].kind === kind) {
+        delete pending[id];
+        changed = true;
+      }
+    });
+    if (changed) writeJson(PENDING_KEY, pending);
+  }
+
   // Records the action that a "Tap to try again" affordance re-runs, and reflects
   // it into whichever surface (unified sidebar or picker) is currently visible.
   function setDesktopRetry(action) {
@@ -1886,16 +1935,19 @@
     var expiredBind = null;
     Object.keys(controlRequests).forEach(function (conversation) {
       var control = controlRequests[conversation];
-      if (!control || !control.created) return;
-      if (now - control.created <= CONTROL_TIMEOUT_MS) return;
+      if (!control) return;
+      // A control request with no timestamp (older format, or restored from a
+      // previous run) must be treated as already stale rather than skipped
+      // forever — otherwise it blocks hasPendingControl() indefinitely.
+      if (control.created && now - control.created <= CONTROL_TIMEOUT_MS) return;
       delete controlRequests[conversation];
       expired = true;
       if (control.kind === 'bind' && !control.silent) expiredBind = control;
     });
     Object.keys(pending).forEach(function (id) {
       var owner = pending[id];
-      if (!owner || !owner.kind || !owner.created) return;
-      if (now - owner.created <= CONTROL_TIMEOUT_MS) return;
+      if (!owner || !owner.kind) return;
+      if (owner.created && now - owner.created <= CONTROL_TIMEOUT_MS) return;
       delete pending[id];
       expired = true;
       if (owner.kind === 'bind' && !owner.silent) expiredBind = owner;
