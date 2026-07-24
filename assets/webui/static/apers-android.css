@@ -786,3 +786,82 @@ button.apers-sidebar-state-retry:active {
     padding-bottom: max(12px, env(safe-area-inset-bottom));
   }
 }
+
+/*
+ * First-run onboarding wizard on the Papers light theme.
+ * The base wizard was authored for the original dark theme: a dark overlay
+ * (rgba(7,12,19,.78)) with near-invisible white step panels (rgba(255,255,255,.02))
+ * and text in var(--text)/var(--muted). Under the Papers light palette --text is
+ * dark ink, so dark text landed on the dark overlay and was unreadable. Re-skin
+ * the overlay and its surfaces to light so the existing text colors read.
+ */
+.apers-android-host .onboarding-overlay {
+  background: rgba(35, 33, 29, .45);
+}
+/* The whole wizard container is a hardcoded dark gradient; re-skin it light so
+   every child that uses var(--text)/var(--muted) becomes readable. */
+.apers-android-host .onboarding-card {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: 0 24px 80px rgba(35, 33, 29, .22);
+}
+.apers-android-host .onboarding-sidebar {
+  background: linear-gradient(180deg, var(--accent-bg), transparent);
+  border-right-color: var(--border-subtle);
+}
+.apers-android-host .onboarding-sidebar h2,
+.apers-android-host #onboardingTitle {
+  color: var(--strong);
+}
+.apers-android-host .onboarding-sidebar p {
+  color: var(--em);
+}
+.apers-android-host .onboarding-step {
+  background: var(--surface-subtle);
+  border-color: var(--border-subtle);
+}
+.apers-android-host .onboarding-step-index {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+.apers-android-host .onboarding-step-title {
+  color: var(--text);
+}
+.apers-android-host .onboarding-step-desc,
+.apers-android-host .onboarding-copy {
+  color: var(--em);
+}
+/* Status + check/summary/oauth cards used near-invisible white-on-dark fills. */
+.apers-android-host .onboarding-status {
+  border-color: var(--border);
+  background: var(--surface-subtle);
+}
+.apers-android-host .onboarding-status.info {
+  color: var(--text);
+}
+.apers-android-host .onboarding-check,
+.apers-android-host .onboarding-summary div,
+.apers-android-host .onboarding-oauth-card {
+  background: var(--surface-subtle);
+  border-color: var(--border-subtle);
+}
+.apers-android-host .onboarding-check strong,
+.apers-android-host .onboarding-summary span,
+.apers-android-host .onboarding-oauth-card strong {
+  color: var(--text);
+}
+.apers-android-host .onboarding-check span,
+.apers-android-host .onboarding-summary strong,
+.apers-android-host .onboarding-oauth-card p {
+  color: var(--em);
+}
+.apers-android-host .onboarding-oauth-card code {
+  background: var(--code-inline-bg);
+  color: var(--code-text);
+}
+.apers-android-host .onboarding-field input,
+.apers-android-host .onboarding-field select {
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
