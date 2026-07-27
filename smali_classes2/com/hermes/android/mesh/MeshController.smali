@@ -1932,3 +1932,121 @@
     :goto_1
     throw v2
 .end method
+
+.method public final pollAllPeers()Ljava/util/List;
+    .locals 9
+    .annotation system Ldalvik/annotation/Signature;
+        value = {
+            "()",
+            "Ljava/util/List<",
+            "Lcom/hermes/android/mesh/MeshClient$Result;",
+            ">;"
+        }
+    .end annotation
+
+    new-instance v0, Ljava/util/ArrayList;
+
+    invoke-direct {v0}, Ljava/util/ArrayList;-><init>()V
+
+    iget-object v1, p0, Lcom/hermes/android/mesh/MeshController;->peers:Lcom/hermes/android/handoff/HandoffPeerStore;
+
+    invoke-virtual {v1}, Lcom/hermes/android/handoff/HandoffPeerStore;->all()Ljava/util/List;
+
+    move-result-object v1
+
+    invoke-interface {v1}, Ljava/util/List;->iterator()Ljava/util/Iterator;
+
+    move-result-object v1
+
+    :goto_0
+    invoke-interface {v1}, Ljava/util/Iterator;->hasNext()Z
+
+    move-result v2
+
+    if-eqz v2, :cond_4
+
+    invoke-interface {v1}, Ljava/util/Iterator;->next()Ljava/lang/Object;
+
+    move-result-object v2
+
+    check-cast v2, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;
+
+    invoke-virtual {v2}, Lcom/hermes/android/handoff/HandoffCrypto$PeerInfo;->getDeviceId()Ljava/lang/String;
+
+    move-result-object v2
+
+    if-eqz v2, :goto_0
+
+    invoke-virtual {p0, v2}, Lcom/hermes/android/mesh/MeshController;->poll(Ljava/lang/String;)Ljava/util/List;
+
+    move-result-object v3
+
+    if-eqz v3, :goto_0
+
+    invoke-interface {v3}, Ljava/util/List;->isEmpty()Z
+
+    move-result v4
+
+    if-nez v4, :goto_0
+
+    invoke-interface {v0, v3}, Ljava/util/List;->addAll(Ljava/util/Collection;)Z
+
+    new-instance v4, Ljava/util/ArrayList;
+
+    invoke-direct {v4}, Ljava/util/ArrayList;-><init>()V
+
+    invoke-interface {v3}, Ljava/util/List;->iterator()Ljava/util/Iterator;
+
+    move-result-object v3
+
+    :goto_1
+    invoke-interface {v3}, Ljava/util/Iterator;->hasNext()Z
+
+    move-result v5
+
+    if-eqz v5, :cond_3
+
+    invoke-interface {v3}, Ljava/util/Iterator;->next()Ljava/lang/Object;
+
+    move-result-object v5
+
+    check-cast v5, Lcom/hermes/android/mesh/MeshClient$Result;
+
+    invoke-virtual {v5}, Lcom/hermes/android/mesh/MeshClient$Result;->getText()Ljava/lang/String;
+
+    move-result-object v6
+
+    const-string v7, "__APERS_CHAT_RESULT_V1__:"
+
+    invoke-virtual {v6, v7}, Ljava/lang/String;->startsWith(Ljava/lang/String;)Z
+
+    move-result v6
+
+    if-nez v6, :goto_1
+
+    invoke-virtual {v5}, Lcom/hermes/android/mesh/MeshClient$Result;->getId()Ljava/lang/String;
+
+    move-result-object v5
+
+    invoke-virtual {v4, v5}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
+
+    goto :goto_1
+
+    :cond_3
+    invoke-virtual {v4}, Ljava/util/ArrayList;->isEmpty()Z
+
+    move-result v5
+
+    if-nez v5, :goto_0
+
+    check-cast v4, Ljava/util/List;
+
+    invoke-virtual {p0, v4, v2}, Lcom/hermes/android/mesh/MeshController;->ack(Ljava/util/List;Ljava/lang/String;)V
+
+    goto :goto_0
+
+    :cond_4
+    check-cast v0, Ljava/util/List;
+
+    return-object v0
+.end method

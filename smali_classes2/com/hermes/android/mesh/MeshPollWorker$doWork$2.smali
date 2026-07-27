@@ -206,7 +206,7 @@
     .line 33
     :cond_0
     :try_start_0
-    invoke-virtual {p1}, Lcom/hermes/android/mesh/MeshController;->poll()Ljava/util/List;
+    invoke-virtual {p1}, Lcom/hermes/android/mesh/MeshController;->pollAllPeers()Ljava/util/List;
 
     move-result-object v0
 
@@ -338,7 +338,7 @@
     check-cast v1, Ljava/util/List;
 
     .line 36
-    invoke-virtual {p1, v1}, Lcom/hermes/android/mesh/MeshController;->ack(Ljava/util/List;)V
+    nop
 
     .line 38
     :cond_3
