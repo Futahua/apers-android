@@ -2235,8 +2235,10 @@
     var deviceId = extra && extra.deviceId || bindingDevice(sessionId);
     if (!host || typeof host.sendToComputer !== 'function' || !refreshLinkStatus(deviceId) ||
         (connectionChecked && !online)) {
-      showPickerState(
-        (deviceId ? peerLabel(deviceId) : 'Hermes PC') + ' is unreachable.', true);
+      // Pass the deviceId rather than pre-formatting: showPickerState re-runs
+      // friendlyBrokerError, which would otherwise rewrite an already-named
+      // message back to the generic "The computer is unreachable."
+      showPickerState('unreachable', true, deviceId);
       return;
     }
     controlRequests[conversation] = Object.assign({
