@@ -59,7 +59,36 @@ remaining item:
    the phone's Tailscale (`poordroid`, `100.124.102.127`) was last seen offline
    — connect it first or this fails for the wrong reason.
 
-### T2.2 `refreshComputerEndpoints` per-deviceId refresh (smali, MEDIUM RISK)
+### T2.2 — **PRIMITIVES DONE (rev 66, `f398f29`), CALL SITE NOT WIRED**
+
+**The plan's premise below was wrong and is kept only for history.** Reading
+the smali: `AutoPair.discover(I)` sends one broadcast and returns on the FIRST
+datagram, then closes the socket. It does not choose among replies — every
+other paired PC already answered, and those packets are simply never read.
+No `HandoffDiscovery.resolveByDeviceId` loop is needed (it would also have
+required a `HandoffDiscovery(Context)` instance ChatWebActivity does not hold).
+
+Landed and verifier-clean, but **not yet called from anywhere**:
+- `AutoPair.discoverAll(I)Ljava/util/List;` — same probe as `discover()`, loops
+  `receive()` until the socket timeout, returns every payload. `discover()`
+  untouched.
+- `MeshController.refreshKnownPeers(List<String>)I` — parses each payload via
+  `crypto.parseQr`, refreshes a peer ONLY when `peers.get(did) != null`, then
+  delegates to the existing `pairFromQr`. Returns the count refreshed. Unknown
+  and malformed responders ignored — important, because the connector reopens a
+  5-minute pairing window on every probe it hears, so a stranger's PC must never
+  be able to add itself during a routine resume.
+
+**Remaining work:** call them from the tail of
+`lambda$refreshComputerEndpoints$5` (ChatWebActivity.smali, at its `:goto_0`
+exit, which already runs on a background Thread so a bounded loop is safe
+there). Needs a small private helper doing the reflective
+`MeshController.refreshKnownPeers` call, mirroring the pattern at
+ChatWebActivity.smali:1082. **Note that file is CRLF** — an LF-anchored patch
+will silently fail to match. Then finger-test: change a PC's IP (DHCP renew or
+reconnect), resume the app, confirm the peer heals without re-pairing.
+
+#### Original (superseded) design, for history
 
 Problem: `lambda$refreshComputerEndpoints$5` calls `AutoPair.discover(1600)`,
 which returns ONE QR string — the discovery winner. The loser's address never
@@ -78,6 +107,20 @@ payload string. Adapt accordingly.
 
 Risk note: runs on activity resume. Keep added blocking time bounded
 (≤1500ms per peer) and mirror whatever threading the existing lambda uses.
+
+### T2.3 — **DONE** (rev 65, `d411c2f`)
+
+`MeshController.pollAllPeers()` added (plain smali, iterates `peers.all()`,
+uses the `poll(String)`/`ack(List,String)` overloads, preserves the
+`__APERS_CHAT_RESULT_V1__` no-ack rule, returns the merged list).
+`doWork$2` changed at exactly one call site; the redundant no-arg ack is a
+`nop`. Verifier-clean on device.
+
+**Still unverified on hardware:** that a result pushed from a second broker
+with the app force-stopped actually notifies. WorkManager's minimum interval
+is ~15 min, so this needs a deliberate wait.
+
+#### Original design notes, for history
 
 ### T2.3 `MeshPollWorker` polls all peers (smali, HIGHEST RISK)
 
