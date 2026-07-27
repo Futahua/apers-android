@@ -249,6 +249,108 @@
     return-object v1
 .end method
 
+.method public static discoverAll(I)Ljava/util/List;
+    .locals 7
+    .annotation system Ldalvik/annotation/Signature;
+        value = {
+            "(I)",
+            "Ljava/util/List<",
+            "Ljava/lang/String;",
+            ">;"
+        }
+    .end annotation
+
+    new-instance v6, Ljava/util/ArrayList;
+
+    invoke-direct {v6}, Ljava/util/ArrayList;-><init>()V
+
+    const/4 v0, 0x0
+
+    :try_start_0
+    new-instance v1, Ljava/net/DatagramSocket;
+
+    invoke-direct {v1}, Ljava/net/DatagramSocket;-><init>()V
+    :try_end_0
+    .catch Ljava/lang/Exception; {:try_start_0 .. :try_end_0} :catch_1
+
+    move-object v0, v1
+
+    :try_start_1
+    const/4 v1, 0x1
+
+    invoke-virtual {v0, v1}, Ljava/net/DatagramSocket;->setBroadcast(Z)V
+
+    invoke-virtual {v0, p0}, Ljava/net/DatagramSocket;->setSoTimeout(I)V
+
+    const-string v1, "APERS_MESH_DISCOVER_V1"
+
+    const-string v2, "UTF-8"
+
+    invoke-virtual {v1, v2}, Ljava/lang/String;->getBytes(Ljava/lang/String;)[B
+
+    move-result-object v1
+
+    const v2, 0xbed8
+
+    const-string v3, "255.255.255.255"
+
+    invoke-static {v0, v1, v3, v2}, Lcom/hermes/android/handoff/AutoPair;->sendProbe(Ljava/net/DatagramSocket;[BLjava/lang/String;I)V
+
+    invoke-static {}, Lcom/hermes/android/handoff/AutoPair;->subnetBroadcast()Ljava/lang/String;
+
+    move-result-object v3
+
+    if-eqz v3, :cond_0
+
+    invoke-static {v0, v1, v3, v2}, Lcom/hermes/android/handoff/AutoPair;->sendProbe(Ljava/net/DatagramSocket;[BLjava/lang/String;I)V
+
+    :cond_0
+    const/16 v1, 0x1000
+
+    new-array v1, v1, [B
+
+    :goto_0
+    new-instance v2, Ljava/net/DatagramPacket;
+
+    array-length v3, v1
+
+    invoke-direct {v2, v1, v3}, Ljava/net/DatagramPacket;-><init>([BI)V
+
+    invoke-virtual {v0, v2}, Ljava/net/DatagramSocket;->receive(Ljava/net/DatagramPacket;)V
+
+    new-instance v3, Ljava/lang/String;
+
+    invoke-virtual {v2}, Ljava/net/DatagramPacket;->getData()[B
+
+    move-result-object v4
+
+    const/4 v5, 0x0
+
+    invoke-virtual {v2}, Ljava/net/DatagramPacket;->getLength()I
+
+    move-result v2
+
+    const-string p0, "UTF-8"
+
+    invoke-direct {v3, v4, v5, v2, p0}, Ljava/lang/String;-><init>([BIILjava/lang/String;)V
+
+    invoke-virtual {v6, v3}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
+
+    goto :goto_0
+    :try_end_1
+    .catch Ljava/lang/Exception; {:try_start_1 .. :try_end_1} :catch_0
+
+    :catch_0
+    move-exception v1
+
+    invoke-virtual {v0}, Ljava/net/DatagramSocket;->close()V
+
+    :catch_1
+    check-cast v6, Ljava/util/List;
+
+    return-object v6
+.end method
+
 .method public static displayHost(Ljava/lang/String;)Ljava/lang/String;
     .locals 1
 
