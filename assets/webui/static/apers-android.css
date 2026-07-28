@@ -1094,3 +1094,56 @@ button.apers-sidebar-state-retry:active {
   cursor: not-allowed;
   opacity: .6;
 }
+
+/* PC group heading: name on the left, collapse caret on the right. Flex is
+   applied here rather than on the base rule so the existing ::before presence
+   dot stays inline with the name. */
+.apers-peer-group-heading {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.apers-peer-group-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apers-peer-collapse {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0;
+  position: relative;
+  width: 26px;
+}
+
+/* Chevron drawn from a rotated border so it needs no font or asset. */
+.apers-peer-collapse::before {
+  border-right: 1.6px solid currentColor;
+  border-bottom: 1.6px solid currentColor;
+  content: "";
+  height: 6px;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -70%) rotate(45deg);
+  transition: transform .15s ease;
+  width: 6px;
+}
+
+/* Collapsed: chevron points right instead of down. */
+.apers-peer-group-heading.is-collapsed .apers-peer-collapse::before {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.apers-peer-collapse:active {
+  background: var(--hover-bg);
+  color: var(--text);
+}

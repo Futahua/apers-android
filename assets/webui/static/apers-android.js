@@ -12,6 +12,7 @@
   var DESKTOP_PROJECT_ORDER_KEY = 'apers-desktop-project-order-v1';
   var PHONE_PROJECT_COLLAPSED_KEY = 'apers-phone-project-collapsed-v1';
   var DESKTOP_PROJECT_COLLAPSED_KEY = 'apers-desktop-project-collapsed-v1';
+  var DESKTOP_PC_COLLAPSED_KEY = 'apers-desktop-pc-collapsed-v1';
   var PC_NAMES_KEY = 'apers-pc-names-v1';
   var PC_LASTSEEN_KEY = 'apers-pc-lastseen-v1';
   var RESULT_PREFIX = '__APERS_CHAT_RESULT_V1__:';
@@ -1080,15 +1081,49 @@
       return a.name.localeCompare(b.name);
     });
     var lastDeviceId = null;
+    // Each PC heading is a sibling of its project groups rather than a wrapper,
+    // so collapsing a computer means hiding every group rendered under it until
+    // the next heading. Track them per-device and toggle the set together.
+    var peerGroupNodes = {};
     groups.forEach(function (group) {
       if (computerPeers.length >= 1 && group.deviceId !== lastDeviceId) {
         var peerHeading = document.createElement('div');
         peerHeading.className = 'apers-peer-group-heading ' +
           (offlinePeers[group.deviceId] ? 'is-pc-offline' : 'is-pc-online');
-        peerHeading.textContent = peerLabel(group.deviceId);
-        (function (headingDevice) {
-          peerHeading.onclick = function () { openComputerManager(headingDevice); };
-        })(group.deviceId);
+        var peerName = document.createElement('span');
+        peerName.className = 'apers-peer-group-name';
+        peerName.textContent = peerLabel(group.deviceId);
+        peerHeading.appendChild(peerName);
+        var peerCaret = document.createElement('button');
+        peerCaret.type = 'button';
+        peerCaret.className = 'apers-peer-collapse';
+        peerCaret.setAttribute('aria-label', 'Collapse ' + peerLabel(group.deviceId));
+        peerHeading.appendChild(peerCaret);
+        (function (headingDevice, headingEl, caretEl) {
+          peerGroupNodes[headingDevice] = [];
+          var startCollapsed = !query &&
+            isProjectCollapsed(DESKTOP_PC_COLLAPSED_KEY, headingDevice);
+          headingEl.classList.toggle('is-collapsed', startCollapsed);
+          caretEl.setAttribute('aria-expanded', String(!startCollapsed));
+          // Applied after the loop too, since a device's groups do not all
+          // exist yet at the moment its heading is created.
+          headingEl.dataset.pcCollapsed = startCollapsed ? '1' : '';
+          caretEl.onclick = function (event) {
+            event.stopPropagation();
+            var nowCollapsed = !headingEl.classList.contains('is-collapsed');
+            var stored = readJson(DESKTOP_PC_COLLAPSED_KEY, {});
+            if (nowCollapsed) stored[headingDevice] = true;
+            else delete stored[headingDevice];
+            writeJson(DESKTOP_PC_COLLAPSED_KEY, stored);
+            headingEl.classList.toggle('is-collapsed', nowCollapsed);
+            caretEl.setAttribute('aria-expanded', String(!nowCollapsed));
+            (peerGroupNodes[headingDevice] || []).forEach(function (node) {
+              node.hidden = nowCollapsed;
+            });
+          };
+          // Tapping the name (not the caret) still opens the manager sheet.
+          peerName.onclick = function () { openComputerManager(headingDevice); };
+        })(group.deviceId, peerHeading, peerCaret);
         list.appendChild(peerHeading);
         lastDeviceId = group.deviceId;
       }
@@ -1096,6 +1131,12 @@
       wrapper.className = 'apers-project-group apers-desktop-project-group';
       wrapper.dataset.desktopProjectId = group.id;
       wrapper.dataset.desktopProjectOrderId = projectOrderId(group.id);
+      if (peerGroupNodes[group.deviceId]) {
+        peerGroupNodes[group.deviceId].push(wrapper);
+        if (!query && isProjectCollapsed(DESKTOP_PC_COLLAPSED_KEY, group.deviceId)) {
+          wrapper.hidden = true;
+        }
+      }
       var header = document.createElement('div');
       header.className = 'apers-project-heading apers-project-heading-manageable';
       if (group.id) header.classList.add('apers-desktop-project-named');
