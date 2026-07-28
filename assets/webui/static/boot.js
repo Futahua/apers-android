@@ -409,7 +409,13 @@ function closeMobileSidebar(){
   if(overlay)overlay.classList.remove('visible');
 }
 
-const _PWA_SIDEBAR_SWIPE_EDGE=80;
+// apers: widened from a narrow 80px edge to 3/8 of the viewport so the
+// sidebar can be pulled out from well inside the page, not just the rim.
+// Computed per-gesture rather than at load so it follows rotation.
+function _pwaSidebarSwipeEdge(){
+  const w=(window.innerWidth||document.documentElement.clientWidth||0);
+  return w?Math.round(w*0.375):80;
+}
 const _PWA_SIDEBAR_SWIPE_CLAIM=10;
 const _PWA_SIDEBAR_SWIPE_TRIGGER=64;
 const _PWA_SIDEBAR_SWIPE_MAX_VERTICAL=56;
@@ -457,12 +463,15 @@ function _onPwaSidebarSwipeStart(e){
   if(_isDesktopWidth())return;
   if(_isTouchPointerEvent(e))return;
   if(e.pointerType==='mouse'||(e.pointerType&&e.pointerType!=='touch'&&e.pointerType!=='pen'))return;
-  if(document.querySelector('.sidebar')?.classList.contains('mobile-open'))return;
+  // apers: when the sidebar is already open, arm a LEFT swipe to close it
+  // rather than bailing out. Direction is the signal when closing, so any
+  // start point is valid; the edge-zone rule still gates opening.
+  const _sbOpen=!!document.querySelector('.sidebar')?.classList.contains('mobile-open');
   const point=_pwaSidebarSwipePoint(e);
   if(!point)return;
-  if(point.clientX>_PWA_SIDEBAR_SWIPE_EDGE)return;
+  if(!_sbOpen&&point.clientX>_pwaSidebarSwipeEdge())return;
   if(_isInteractiveSwipeTarget(e.target))return;
-  _pwaSidebarSwipe={startX:point.clientX,startY:point.clientY,active:true,opened:false};
+  _pwaSidebarSwipe={startX:point.clientX,startY:point.clientY,active:true,opened:false,closing:_sbOpen};
 }
 
 function _onPwaSidebarSwipeMove(e){
@@ -473,6 +482,21 @@ function _onPwaSidebarSwipeMove(e){
   if(!point)return;
   const dx=point.clientX-swipe.startX;
   const dy=point.clientY-swipe.startY;
+  if(swipe.closing){
+    // apers: mirror of the open gesture. Bail on a rightward or mostly-vertical
+    // drag so scrolling the session list inside the sidebar still works.
+    if(dx>0||Math.abs(dy)>_PWA_SIDEBAR_SWIPE_MAX_VERTICAL*1.5){_pwaSidebarSwipe=null;return;}
+    const adx=-dx;
+    if(adx>=_PWA_SIDEBAR_SWIPE_CLAIM&&adx>Math.abs(dy)*1.2){
+      if(e.cancelable)e.preventDefault();
+    }
+    if(adx>=_PWA_SIDEBAR_SWIPE_TRIGGER&&Math.abs(dy)<=_PWA_SIDEBAR_SWIPE_MAX_VERTICAL&&adx>Math.abs(dy)*1.5){
+      if(e.cancelable)e.preventDefault();
+      swipe.opened=true;
+      try{if(typeof closeMobileSidebar==='function')closeMobileSidebar();}catch(_){}
+    }
+    return;
+  }
   if(dx<0||Math.abs(dy)>_PWA_SIDEBAR_SWIPE_MAX_VERTICAL*1.5){_pwaSidebarSwipe=null;return;}
   if(dx>=_PWA_SIDEBAR_SWIPE_CLAIM&&dx>Math.abs(dy)*1.2){
     if(e.cancelable)e.preventDefault();

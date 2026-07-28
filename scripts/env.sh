@@ -7,11 +7,21 @@ set -euo pipefail
 export JAVA_HOME="${JAVA_HOME:-/d/Programs/Android Studio/jbr}"
 
 # Android SDK with build-tools;35.0.0 + platform-tools installed.
-export ANDROID_SDK="${ANDROID_SDK:-/d/apers-build/tools/android-sdk}"
+# APERS_BUILD_ROOT holds the toolchain. It has moved before (/d/apers-build ->
+# /d/.claude/apers-build), so resolve it instead of hardcoding: honour an
+# explicit override, else take the first location that actually exists.
+if [ -z "${APERS_BUILD_ROOT:-}" ]; then
+  for _cand in /d/.claude/apers-build /d/apers-build; do
+    if [ -d "$_cand/tools" ]; then APERS_BUILD_ROOT="$_cand"; break; fi
+  done
+  APERS_BUILD_ROOT="${APERS_BUILD_ROOT:-/d/.claude/apers-build}"
+fi
+export APERS_BUILD_ROOT
+export ANDROID_SDK="${ANDROID_SDK:-$APERS_BUILD_ROOT/tools/android-sdk}"
 export BUILD_TOOLS="${BUILD_TOOLS:-$ANDROID_SDK/build-tools/35.0.0}"
 
 # apktool 2.11.x fat jar.
-export APKTOOL_JAR="${APKTOOL_JAR:-/d/apers-build/tools/apktool.jar}"
+export APKTOOL_JAR="${APKTOOL_JAR:-$APERS_BUILD_ROOT/tools/apktool.jar}"
 
 # Decoded apktool project root (this repo).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
