@@ -34,6 +34,34 @@ Computer" to the desktop is down until the connector is started again.
 
 ## T2 — Real laptop + the two Phase-2 smali changes
 
+### T2.1 — **CORE VERIFIED 2026-07-28**
+
+Per-PC routing is finger-verified across two real machines: SlopTop
+(`319b237d86f92ab8`) and LapDog (`b73650d68f1e7b36`), both paired with `alts`,
+both green, each holding its own distinct session list. `whoami && hostname`
+sent to LapDog stayed on LapDog. Task `13a59ec0` completed end to end on
+SlopTop from the phone's post-wipe identity `aa2582b03b458e2d`.
+
+Getting here required resolving a phantom-identity fault (see the ops memory):
+the phone's did had to be reset via `pm clear` because `_op_pair`
+(mesh_broker.py:502) is a no-op when did+key already match, so re-pairing alone
+could never rewrite `peers.json`. LapDog then paired cleanly on the first
+attempt, since the phone's new did was genuinely unknown to it.
+
+**Remaining sub-steps [FINGER], all lower risk than the routing check:**
+2. Stop-ownership: ~60s task on LapDog, Stop mid-run, confirm SlopTop
+   undisturbed.
+3. Cross-PC isolation: LapDog mid-task while sending to SlopTop.
+4. Lid-close mid-turn on LapDog; expect named offline error + read-only
+   composer, result on reconnect.
+5. Roaming: phone on mobile data, Tailscale up on the phone.
+
+Note: a control request (`new`/`port`/`bind`) can time out with "did not
+respond" if it queues behind a running task — the connector runs one
+`hermes chat` at a time. Retry when idle before treating it as a fault.
+
+#### Original notes, for history
+
 ### T2.1 Onboard the real second laptop — **PARTLY DONE**
 
 Done: connector installed on LapDog, Tailscale joined (tailnet
