@@ -1989,7 +1989,7 @@
     });
   }
 
-  function chooseComputerPeer() {
+  function chooseComputerPeer(currentDeviceId) {
     if (computerPeers.length < 2) return Promise.resolve(defaultDeviceId());
     return new Promise(function (resolve) {
       var backdrop = document.createElement('div');
@@ -2009,7 +2009,10 @@
         name.textContent = peerLabel(id);
         var detail = document.createElement('small');
         detail.className = 'apers-peer-picker-detail';
-        detail.textContent = peerDetail(id);
+        // Mark the PC this conversation is already on, so choosing "the same
+        // one again" is a deliberate tap rather than a guess.
+        detail.textContent = peerDetail(id) +
+          (currentDeviceId && id === currentDeviceId ? ' · current' : '');
         button.appendChild(name);
         button.appendChild(detail);
         button.onclick = function () { backdrop.remove(); resolve(id); };
@@ -2403,8 +2406,14 @@
   async function startNewDesktopSession() {
     var sessionId = activeSessionId();
     var deviceId = bindingDevice(sessionId) || defaultDeviceId();
-    if (computerPeers.length > 1 && !isDesktopConversation(sessionId)) {
-      deviceId = await chooseComputerPeer();
+    // Ask whenever more than one PC is paired, including from inside an
+    // existing Desktop chat. Previously this branch also required
+    // !isDesktopConversation, so starting a new session from a Desktop chat
+    // silently inherited that chat's PC via bindingDevice — the user had no
+    // way to see which machine it landed on. portPhoneSession always asks;
+    // these two paths now behave the same.
+    if (computerPeers.length > 1) {
+      deviceId = await chooseComputerPeer(bindingDevice(sessionId));
       if (!deviceId) return;
     }
     if (!isDesktopConversation(sessionId)) {
