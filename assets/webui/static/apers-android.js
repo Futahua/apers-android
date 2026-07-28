@@ -1034,14 +1034,15 @@
       return (String(session.title || '') + ' ' + String(session.preview || ''))
         .toLowerCase().indexOf(query) >= 0;
     });
-    if (sidebarState) {
-      appendSidebarState(list, sidebarState, sidebarStateIsError);
-    } else if (!computerPeers.length && !query) {
-      // Zero paired PCs: every other route to openAddComputer lives behind a
-      // per-PC surface (group-header manager, or the picker, which needs 2+),
-      // so without this the first computer can only be paired on the native
-      // screen. This is the one entry point that must not depend on a peer.
+    // Zero paired PCs is checked FIRST, ahead of sidebarState: on a fresh
+    // install the poll sets an "unreachable" error immediately, which would
+    // otherwise take this branch and hide the only route to pairing a first
+    // computer. An error about reaching a computer is meaningless when none
+    // has ever been added.
+    if (!computerPeers.length && !query) {
       appendAddComputerCta(list);
+    } else if (sidebarState) {
+      appendSidebarState(list, sidebarState, sidebarStateIsError);
     } else if (!rows.length) {
       appendSidebarState(
         list,
@@ -1131,9 +1132,17 @@
     list.appendChild(wrap);
     var host = bridge();
     // Feature-detect: on an older APK the bridge lacks these, and the native
-    // Mesh screen remains the way in — don't offer a button that cannot work.
+    // Mesh screen remains the way in. Say so rather than rendering a dead end
+    // with no button and no explanation.
     if (!host || (typeof host.pairComputer !== 'function' &&
-        typeof host.discoverComputer !== 'function')) return;
+        typeof host.discoverComputer !== 'function')) {
+      var fallback = document.createElement('div');
+      fallback.className = 'apers-sidebar-state';
+      fallback.textContent = 'This app build cannot add a computer from here — ' +
+        'use the Original (native) app to pair the first one.';
+      list.appendChild(fallback);
+      return;
+    }
     var button = document.createElement('button');
     button.type = 'button';
     button.className = 'apers-sidebar-state apers-sidebar-state-retry';
