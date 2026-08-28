@@ -103,19 +103,42 @@
   var unpairCallback = null;
   var delegationReadAt = 0;
 
+  // The device whose delegation policy this conversation can speak for.
+  //
+  // ROUTING IS A PC-SIDE POLICY. It decides what the Hermes on that computer
+  // may do to a repository; it means nothing for a conversation the phone is
+  // running by itself. So this deliberately does NOT fall back to "any paired
+  // computer" -- a phone-native chat with a computer merely paired would have
+  // shown a switch that governs something the conversation cannot reach.
   function delegationTargetDevice() {
-    return bindingDevice(activeSessionId()) || defaultDeviceId();
+    var sessionId = activeSessionId();
+    if (!isDesktopConversation(sessionId)) return '';
+    return bindingDevice(sessionId) || defaultDeviceId();
   }
 
+  // The pill carries the state; there is no separate status line to read. It
+  // stays HIDDEN until a computer is bound, because the policy it writes lives
+  // on that computer -- a pill offering to route repository changes with
+  // nowhere to route them is a lie in the shape of a button.
+  var delegationOn = false;
+
   function renderDelegationToggle(value, loading, deviceId) {
-    var input = document.getElementById('apersRouteRepoChanges');
-    var status = document.getElementById('apersRouteRepoChangesStatus');
-    if (!input || !status) return;
-    input.disabled = !!loading || !deviceId;
-    if (typeof value === 'boolean') input.checked = value;
-    status.textContent = !deviceId ? 'Connect a computer to use this setting.' :
-      loading ? 'Reading ' + peerLabel(deviceId) + '…' :
-      (input.checked ? 'On on ' : 'Off on ') + peerLabel(deviceId) + '.';
+    var pill = document.getElementById('apersDelegationPill');
+    var label = document.getElementById('apersDelegationPillLabel');
+    if (!pill || !label) return;
+    if (!deviceId) { pill.hidden = true; return; }
+    pill.hidden = false;
+    if (typeof value === 'boolean') delegationOn = value;
+    pill.disabled = !!loading;
+    pill.classList.toggle('is-on', delegationOn);
+    pill.classList.toggle('is-loading', !!loading);
+    pill.setAttribute('aria-pressed', delegationOn ? 'true' : 'false');
+    label.textContent = delegationOn ? 'Delegated' : 'Delegate';
+    var where = peerLabel(deviceId);
+    pill.title = loading ? 'Reading ' + where + '…' :
+      delegationOn ? 'Repository changes go to Delegate Wave on ' + where + ' — tap to let Hermes edit directly'
+                   : 'Hermes edits repositories directly on ' + where + ' — tap to route changes to Delegate Wave';
+    pill.setAttribute('aria-label', pill.title);
   }
 
   function requestDelegationState() {
@@ -3585,9 +3608,10 @@
     installUnifiedSidebar();
     installHermesEmptyState();
     installDrawerBackdrop();
-    var delegationToggle = document.getElementById('apersRouteRepoChanges');
-    if (delegationToggle) delegationToggle.addEventListener('change', function () {
-      setDelegationState(!!delegationToggle.checked);
+    var delegationPill = document.getElementById('apersDelegationPill');
+    if (delegationPill) delegationPill.addEventListener('click', function () {
+      if (delegationPill.disabled) return;
+      setDelegationState(!delegationOn);
     });
     window.addEventListener('popstate', function () {
       if (pickerOpen) closeDesktopSessions(true);
@@ -3617,9 +3641,7 @@
       updateTargetUi();
       updateBusyPickerVisibility();
       refreshComputerPeers();
-      var preferences = document.getElementById('settingsPanePreferences');
-      if (preferences && preferences.classList.contains('active') &&
-          Date.now() - delegationReadAt > 5000) requestDelegationState();
+      if (!document.hidden && Date.now() - delegationReadAt > 15000) requestDelegationState();
       var binding = activeBinding();
       var normalPending = Object.keys(pending).some(function (id) {
         return pending[id] && !pending[id].kind;

@@ -70,7 +70,7 @@
   }
 })()</script>
 <link rel="stylesheet" href="static/style.css?v=__WEBUI_VERSION__">
-<link rel="stylesheet" href="static/apers-android.css?v=__WEBUI_VERSION__&apers=77">
+<link rel="stylesheet" href="static/apers-android.css?v=__WEBUI_VERSION__&apers=80">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" integrity="sha384-LJcOxlx9IMbNXDqJ2axpfEQKkAYbFjJfhXexLfiRJhjDU81mzgkiQq8rkV0j6dVh" crossorigin="anonymous">
   <!-- KaTeX math rendering CSS (loaded eagerly from vendored assets to prevent font CSP noise) -->
   <link rel="stylesheet" href="static/vendor/katex/0.16.22/katex.min.css">
@@ -631,6 +631,10 @@
               </svg>
             </button>
             <div class="composer-divider" aria-hidden="true"></div>
+            <button class="apers-delegation-pill" id="apersDelegationPill" type="button" hidden aria-pressed="false" aria-label="Route repository changes to Delegate Wave" title="Route repository changes to Delegate Wave">
+              <span class="apers-delegation-pill-icon" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>
+              <span class="apers-delegation-pill-label" id="apersDelegationPillLabel">Delegate</span>
+            </button>
             <button class="yolo-pill" id="yoloPill" type="button" onclick="cmdYolo()" style="display:none" title="YOLO mode — click to disable" data-i18n-title="yolo_pill_title_active">
               <span class="yolo-pill-icon" aria-hidden="true">⚡</span>
               <span class="yolo-pill-label" data-i18n="yolo_pill_label">YOLO</span>
@@ -1157,14 +1161,6 @@
                 <div class="settings-section-title" data-i18n="settings_section_preferences_title">Preferences</div>
                 <div class="settings-section-meta" data-i18n="settings_section_preferences_meta">Defaults and UI behavior for Hermes Web UI.</div>
               </div>
-            </div>
-            <div class="settings-field apers-delegation-setting" data-settings-search="delegate delegation repository changes route desktop computer">
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-                <input type="checkbox" id="apersRouteRepoChanges" disabled style="width:15px;height:15px;accent-color:var(--accent)">
-                <span>Route repository changes</span>
-              </label>
-              <div style="font-size:11px;color:var(--muted);margin-top:4px">Send repository-change requests to Delegate Wave instead of letting Hermes edit files directly.</div>
-              <div id="apersRouteRepoChangesStatus" class="apers-delegation-status" aria-live="polite">Reading the connected computer…</div>
             </div>
             <div class="settings-field">
               <label for="settingsModelChip" data-i18n="settings_label_model">Default Model</label>
@@ -1790,7 +1786,7 @@
 <script src="static/extension_settings.js?v=__WEBUI_VERSION__" defer></script>
 <script src="static/panels.js?v=__WEBUI_VERSION__" defer></script>
 <script src="static/onboarding.js?v=__WEBUI_VERSION__" defer></script>
-<script src="static/apers-android.js?v=__WEBUI_VERSION__&apers=77" defer></script>
+<script src="static/apers-android.js?v=__WEBUI_VERSION__&apers=80" defer></script>
 <script src="static/boot.js?v=__WEBUI_VERSION__" defer></script>
 <script src="static/outline.js?v=__WEBUI_VERSION__" defer></script>
 

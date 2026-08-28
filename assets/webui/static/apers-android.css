@@ -1147,5 +1147,17 @@ button.apers-sidebar-state-retry:active {
   background: var(--hover-bg);
   color: var(--text);
 }
-html.apers-android-host .apers-delegation-setting{border-color:color-mix(in srgb,var(--accent) 22%,var(--border));background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 7%,transparent),transparent);}
-html.apers-android-host .apers-delegation-status{margin-top:7px;font-size:11px;font-weight:600;color:var(--accent-text,var(--accent));}
+/* Composer delegation toggle. ICON ONLY, sized like its icon-btn neighbours:
+   a labelled pill here gets clipped by the send button on a phone-width row,
+   and a control whose text is cut in half is worse than one with no text. The
+   full sentence lives in title/aria-label, which is also what a screen reader
+   reads. Neutral when OFF (the default), accent-filled when ON. */
+.apers-delegation-pill{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:30px;height:30px;padding:0;border-radius:999px;background:transparent;color:var(--muted);border:1px solid transparent;cursor:pointer;transition:all .15s;}
+.apers-delegation-pill:hover{color:var(--text);background:var(--hover-bg);}
+.apers-delegation-pill[hidden]{display:none;}
+.apers-delegation-pill.is-on{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent);}
+.apers-delegation-pill.is-on:hover{background:color-mix(in srgb,var(--accent) 25%,transparent);}
+.apers-delegation-pill.is-loading{opacity:.55;cursor:default;}
+.apers-delegation-pill-icon{display:inline-flex;}
+/* Kept in the DOM for assistive tech; never painted. */
+.apers-delegation-pill-label{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;}
