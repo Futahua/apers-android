@@ -24,6 +24,8 @@
   var CONTROL_RENAME_ID = '__desktop_rename__';
   var CONTROL_ARCHIVE_ID = '__desktop_archive__';
   var CONTROL_CANCEL_ID = '__desktop_cancel__';
+  var CONTROL_DELEGATION_GET_ID = '__desktop_delegation_get__';
+  var CONTROL_DELEGATION_SET_ID = '__desktop_delegation_set__';
   var CONTROL_LIST_PROMPT = '__APERS_LIST_DESKTOP_SESSIONS_V1__';
   var CONTROL_BIND_PROMPT = '__APERS_BIND_DESKTOP_SESSION_V1__';
   var CONTROL_NEW_PROMPT = '__APERS_NEW_DESKTOP_SESSION_V1__';
@@ -31,6 +33,8 @@
   var CONTROL_RENAME_PROMPT = '__APERS_RENAME_DESKTOP_SESSION_V1__';
   var CONTROL_ARCHIVE_PROMPT = '__APERS_ARCHIVE_DESKTOP_SESSION_V1__';
   var CONTROL_CANCEL_PROMPT = '__APERS_CANCEL_TASK_V1__';
+  var CONTROL_DELEGATION_GET_PROMPT = '__APERS_GET_DELEGATION_V1__';
+  var CONTROL_DELEGATION_SET_PROMPT = '__APERS_SET_DELEGATION_V1__';
   var linked = false;
   var online = false;
   var connectionChecked = false;
@@ -97,6 +101,43 @@
   var pairCallback = null;
   var discoverCallback = null;
   var unpairCallback = null;
+  var delegationReadAt = 0;
+
+  function delegationTargetDevice() {
+    return bindingDevice(activeSessionId()) || defaultDeviceId();
+  }
+
+  function renderDelegationToggle(value, loading, deviceId) {
+    var input = document.getElementById('apersRouteRepoChanges');
+    var status = document.getElementById('apersRouteRepoChangesStatus');
+    if (!input || !status) return;
+    input.disabled = !!loading || !deviceId;
+    if (typeof value === 'boolean') input.checked = value;
+    status.textContent = !deviceId ? 'Connect a computer to use this setting.' :
+      loading ? 'Reading ' + peerLabel(deviceId) + '…' :
+      (input.checked ? 'On on ' : 'Off on ') + peerLabel(deviceId) + '.';
+  }
+
+  function requestDelegationState() {
+    var deviceId = delegationTargetDevice();
+    if (!deviceId) {
+      renderDelegationToggle(undefined, false, deviceId);
+      return;
+    }
+    if (hasPendingControl('list') || hasPendingControl('delegation-set')) return;
+    renderDelegationToggle(undefined, true, deviceId);
+    requestDesktopSessions('__desktop_settings__', deviceId);
+  }
+
+  function setDelegationState(enabled) {
+    var deviceId = delegationTargetDevice();
+    if (!deviceId || hasPendingControl('delegation-get') || hasPendingControl('delegation-set')) return;
+    renderDelegationToggle(enabled, true, deviceId);
+    dispatchControl(CONTROL_DELEGATION_SET_ID, 'delegation-set',
+      CONTROL_DELEGATION_SET_PROMPT + '\n' + JSON.stringify({
+        conversation_id: 'delegation-settings', route_repo_changes: !!enabled
+      }), '__desktop_settings__', { deviceId: deviceId });
+  }
 
   function markPeerSeen(deviceId) {
     if (!deviceId) return;
@@ -2731,6 +2772,12 @@
       pending[String(event.id)] = control;
       writeJson(PENDING_KEY, pending);
       updateTargetUi();
+      if (control.kind === 'delegation-set') {
+        window.setTimeout(function () {
+          dropControlRequests('delegation-set');
+          requestDelegationState();
+        }, 700);
+      }
       return;
     }
     var dispatch = event && event.conversation_id
@@ -2801,7 +2848,16 @@
       // not download on every poll forever. Never discard an orphaned chat
       // result: it may contain a real user-visible answer after an app restart.
       if (!owner) {
-        if (isDesktopControlResult(result)) accepted.push(String(result.id));
+        if (isDesktopControlResult(result)) {
+          try {
+            var orphanControl = JSON.parse(unwrapComputerResult(result.text || '') || '{}');
+            if (typeof orphanControl.route_repo_changes === 'boolean') {
+              delegationReadAt = Date.now();
+              renderDelegationToggle(orphanControl.route_repo_changes, false, deviceId);
+            }
+          } catch (_) {}
+          accepted.push(String(result.id));
+        }
         return;
       }
       if (deviceId && owner.deviceId && owner.deviceId !== deviceId) return;
@@ -2874,35 +2930,37 @@
     if (!message || message.role !== 'user') return null;
     var content = String(message.content || '');
     if (!/\[delegate-wave-wake:wake_[^\]]+\]/i.test(content)) return null;
-    var question = content.match(/needs an answer before it can continue\.\s*\n+([\s\S]*?)(?:\n+Answer it with session_answer|\n+\[delegate-wave-wake:|$)/i);
+    var taskMatch = content.match(/delegate-wave session working on "([^"]+)"/i);
+    var task = taskMatch && String(taskMatch[1] || '').trim() || 'the delegated task';
+    var question = content.match(/needs an answer before it can continue\.\s*\n+([\s\S]*?)(?:\n+Why it matters:|\n+Answer it with session_answer|\n+\[delegate-wave-wake:|$)/i);
     if (question) {
       return {
         kind: 'question',
-        label: 'Delegate Wave needs input',
+        label: 'Delegate Wave · Needs input',
         body: String(question[1] || '').trim() || 'The delegated task is waiting for your answer.'
       };
     }
     if (/finished and its result is on the branch/i.test(content)) {
       return {
         kind: 'completed',
-        label: 'Delegate Wave completed',
-        body: 'Delegated work finished. Hermes was woken to collect the result.'
+        label: 'Delegate Wave · Completed',
+        body: 'Finished ' + task + ' and published the result.'
       };
     }
     if (/has a finished, validated candidate/i.test(content)) {
       return {
         kind: 'ready',
-        label: 'Delegate Wave result ready',
-        body: 'A validated result is ready for review. Hermes was woken to collect it.'
+        label: 'Delegate Wave · Ready for review',
+        body: 'Validated ' + task + '; the candidate is waiting for review.'
       };
     }
     if (/delegate-wave session[\s\S]* failed\./i.test(content)) {
       var failure = content.match(/failed\.\s*(?:\n+([\s\S]*?))?(?:\n+Use session_poll|\n+\[delegate-wave-wake:|$)/i);
       return {
         kind: 'failed',
-        label: 'Delegate Wave stopped',
+        label: 'Delegate Wave · Stopped',
         body: failure && String(failure[1] || '').trim() ||
-          'The delegated task stopped before it could finish. Hermes was notified.'
+          'Could not finish ' + task + '.'
       };
     }
     return {
@@ -2979,7 +3037,7 @@
         offlinePeers[owner.deviceId] = true;
         renderDesktopSessionList();
       }
-      if (!owner.silent) {
+      if (!owner.silent && owner.kind !== 'delegation-get' && owner.kind !== 'delegation-set') {
         if (owner.kind === 'bind') {
           var failedDesktopId = owner.desktopSessionId;
           showDesktopError(
@@ -2989,9 +3047,26 @@
           showPickerState(String(value.error || 'Desktop request failed.'), true);
         }
       }
+      if (owner.kind === 'delegation-get' || owner.kind === 'delegation-set') {
+        renderDelegationToggle(undefined, false, owner.deviceId);
+        if (typeof showToast === 'function') showToast('Could not update delegation on the computer.', 2800);
+      }
+      return;
+    }
+    if (owner.kind === 'delegation-get' || owner.kind === 'delegation-set') {
+      delegationReadAt = Date.now();
+      renderDelegationToggle(!!value.route_repo_changes, false, owner.deviceId);
+      if (owner.kind === 'delegation-set' && typeof showToast === 'function') {
+        showToast(value.route_repo_changes ? 'Repository changes will be delegated.' :
+          'Hermes can change repository files directly.', 2600);
+      }
       return;
     }
     if (owner.kind === 'list') {
+      if (typeof value.route_repo_changes === 'boolean') {
+        delegationReadAt = Date.now();
+        renderDelegationToggle(value.route_repo_changes, false, owner.deviceId);
+      }
       if (owner.deviceId) delete offlinePeers[owner.deviceId];
       // Only THIS device's sessions came back. Assigning them to desktopSessions
       // would drop every other PC's rows from the sidebar until the next full
@@ -3510,6 +3585,10 @@
     installUnifiedSidebar();
     installHermesEmptyState();
     installDrawerBackdrop();
+    var delegationToggle = document.getElementById('apersRouteRepoChanges');
+    if (delegationToggle) delegationToggle.addEventListener('change', function () {
+      setDelegationState(!!delegationToggle.checked);
+    });
     window.addEventListener('popstate', function () {
       if (pickerOpen) closeDesktopSessions(true);
     });
@@ -3538,6 +3617,9 @@
       updateTargetUi();
       updateBusyPickerVisibility();
       refreshComputerPeers();
+      var preferences = document.getElementById('settingsPanePreferences');
+      if (preferences && preferences.classList.contains('active') &&
+          Date.now() - delegationReadAt > 5000) requestDelegationState();
       var binding = activeBinding();
       var normalPending = Object.keys(pending).some(function (id) {
         return pending[id] && !pending[id].kind;
@@ -3551,6 +3633,7 @@
     }, 1500);
     setTimeout(pollComputer, 400);
     setTimeout(refreshDesktopConversationOnForeground, 600);
+    setTimeout(requestDelegationState, 900);
   }
 
   if (document.readyState === 'loading') {

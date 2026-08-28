@@ -16154,7 +16154,7 @@ function renderMessages(options){
       const wakeLabel=String(wake.label||'Delegate Wave update');
       const wakeText=String(rowDisplayContent||'').trim();
       const wakeFootHtml=`<div class="msg-foot">${timeHtml}<span class="msg-actions">${copyBtn}</span></div>`;
-      const wakeIcon=wakeKind==='completed'||wakeKind==='ready'?'check':wakeKind==='failed'?'alert-triangle':'git-branch';
+      const wakeIcon=wakeKind==='completed'?'check':wakeKind==='ready'?'eye':wakeKind==='failed'?'alert-triangle':'circle-help';
       const nextRowHtml=`<div class="delegate-wave-wake-notice" data-wake-kind="${esc(wakeKind)}"><div class="delegate-wave-wake-icon">${li(wakeIcon,15)}</div><div class="delegate-wave-wake-content"><div class="delegate-wave-wake-label">${esc(wakeLabel)}</div><div class="msg-body delegate-wave-wake-body">${bodyHtml}</div>${wakeFootHtml}</div></div>`;
       if(row){
         row.className='msg-row delegate-wave-wake-row';
