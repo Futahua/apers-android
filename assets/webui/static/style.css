@@ -2334,6 +2334,20 @@
   .process-wakeup-row .msg-body pre.process-wakeup-text{margin:0;padding:0;border:0;border-radius:0;background:transparent;color:var(--muted);font-family:var(--font-mono);font-size:12px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;}
   .process-wakeup-row .msg-foot{padding-left:0;margin-top:5px;}
   @media(max-width:700px){.process-wakeup-notice{margin-left:0;}}
+  .delegate-wave-wake-row{padding:7px 0;}
+  .delegate-wave-wake-notice{display:flex;align-items:flex-start;gap:10px;margin:8px 0 8px var(--msg-rail);max-width:min(var(--msg-max),760px);padding:11px 12px;border:1px solid color-mix(in srgb,var(--accent-bg-strong) 28%,var(--border));border-radius:12px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent-bg-strong) 9%,var(--surface)) 0%,var(--surface-subtle,var(--hover-bg)) 100%);color:var(--muted);}
+  .delegate-wave-wake-notice[data-wake-kind="completed"],.delegate-wave-wake-notice[data-wake-kind="ready"]{border-color:color-mix(in srgb,#35b978 34%,var(--border));background:linear-gradient(135deg,color-mix(in srgb,#35b978 10%,var(--surface)) 0%,var(--surface-subtle,var(--hover-bg)) 100%);}
+  .delegate-wave-wake-icon{display:flex;align-items:center;justify-content:center;flex:0 0 auto;width:27px;height:27px;border-radius:9px;background:color-mix(in srgb,var(--accent-bg-strong) 15%,transparent);color:var(--accent-text);}
+  .delegate-wave-wake-notice[data-wake-kind="completed"] .delegate-wave-wake-icon,.delegate-wave-wake-notice[data-wake-kind="ready"] .delegate-wave-wake-icon{background:color-mix(in srgb,#35b978 16%,transparent);color:#35b978;}
+  .delegate-wave-wake-notice[data-wake-kind="failed"]{border-color:color-mix(in srgb,#d05b57 34%,var(--border));background:linear-gradient(135deg,color-mix(in srgb,#d05b57 9%,var(--surface)) 0%,var(--surface-subtle,var(--hover-bg)) 100%);}
+  .delegate-wave-wake-notice[data-wake-kind="failed"] .delegate-wave-wake-icon{background:color-mix(in srgb,#d05b57 15%,transparent);color:#d05b57;}
+  .delegate-wave-wake-icon svg{width:15px;height:15px;}
+  .delegate-wave-wake-content{min-width:0;flex:1;}
+  .delegate-wave-wake-label{margin:1px 0 3px;font-size:12px;font-weight:700;letter-spacing:.01em;color:var(--strong);}
+  .delegate-wave-wake-row .msg-body.delegate-wave-wake-body{padding-left:0;max-width:none;color:var(--muted);font-size:13px;line-height:1.45;}
+  .delegate-wave-wake-row .msg-body.delegate-wave-wake-body p{margin:0;}
+  .delegate-wave-wake-row .msg-foot{padding-left:0;margin-top:5px;}
+  @media(max-width:700px){.delegate-wave-wake-notice{margin-left:0;}}
   /* Keep original theme background — prevent prism-tomorrow from overriding --code-bg */
   .msg-body pre[class*="language-"],.msg-body pre code[class*="language-"]{background:var(--code-bg) !important;}
   /* Fix #1463: Prism YAML grammar collapses newlines inside token spans — force pre */

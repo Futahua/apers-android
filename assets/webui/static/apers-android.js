@@ -36,6 +36,8 @@
   var connectionChecked = false;
   var lastActiveSessionId = null;
   var lastDesktopSync = 0;
+  var lastDesktopForegroundSync = 0;
+  var started = false;
   var pending = readJson(PENDING_KEY, {});
   // Control requests (bind/list/new/port/rename/archive) are in-flight companion
   // round-trips; they are meaningless across a restart because the companion
@@ -2444,6 +2446,37 @@
          { desktopSessionId: desktopSessionId, silent: !!silent, deviceId: deviceId });
   }
 
+  function refreshDesktopConversationOnForeground() {
+    if (!started || document.hidden) return;
+    var now = Date.now();
+    // visibilitychange, pageshow, and focus can arrive together on Android.
+    // Treat them as one resume instead of dispatching three companion requests.
+    if (now - lastDesktopForegroundSync < 1500) return;
+    var sessionId = activeSessionId();
+    var binding = activeBinding();
+    if (!isDesktopConversation(sessionId) || !binding) return;
+    var normalPending = Object.keys(pending).some(function (id) {
+      return pending[id] && !pending[id].kind;
+    });
+    if (normalPending) return;
+    var authoredBindPending = Object.keys(controlRequests).some(function (id) {
+      return controlRequests[id] && controlRequests[id].kind === 'bind' &&
+        !controlRequests[id].silent;
+    }) || Object.keys(pending).some(function (id) {
+      return pending[id] && pending[id].kind === 'bind' && !pending[id].silent;
+    });
+    // The initial app load and a sidebar tap own their visible loading state.
+    // Never turn either into a silent refresh behind the user's back.
+    if (authoredBindPending) return;
+    lastDesktopForegroundSync = now;
+    // A background bind can be stranded when Android suspends the WebView.
+    // Its eventual reply is safely acknowledged as an orphan. Let the fresh,
+    // foreground request own the active conversation instead.
+    dropControlRequests('bind', true);
+    lastDesktopSync = 0;
+    bindDesktopSession(binding.id, true, sessionId, binding.deviceId);
+  }
+
   async function startNewDesktopSession() {
     var sessionId = activeSessionId();
     var deviceId = bindingDevice(sessionId) || defaultDeviceId();
@@ -2561,15 +2594,17 @@
   // user-initiated selection is never blocked by an earlier control op — most
   // importantly a stale bind, which otherwise persists in localStorage and makes
   // hasPendingControl('bind') true forever, silently swallowing every tap.
-  function dropControlRequests(kind) {
+  function dropControlRequests(kind, silentOnly) {
     var changed = false;
     Object.keys(controlRequests).forEach(function (id) {
-      if (controlRequests[id] && controlRequests[id].kind === kind) {
+      if (controlRequests[id] && controlRequests[id].kind === kind &&
+          (!silentOnly || controlRequests[id].silent)) {
         delete controlRequests[id];
       }
     });
     Object.keys(pending).forEach(function (id) {
-      if (pending[id] && pending[id].kind === kind) {
+      if (pending[id] && pending[id].kind === kind &&
+          (!silentOnly || pending[id].silent)) {
         delete pending[id];
         changed = true;
       }
@@ -2835,6 +2870,48 @@
     }
   }
 
+  function delegateWaveWakePresentation(message) {
+    if (!message || message.role !== 'user') return null;
+    var content = String(message.content || '');
+    if (!/\[delegate-wave-wake:wake_[^\]]+\]/i.test(content)) return null;
+    var question = content.match(/needs an answer before it can continue\.\s*\n+([\s\S]*?)(?:\n+Answer it with session_answer|\n+\[delegate-wave-wake:|$)/i);
+    if (question) {
+      return {
+        kind: 'question',
+        label: 'Delegate Wave needs input',
+        body: String(question[1] || '').trim() || 'The delegated task is waiting for your answer.'
+      };
+    }
+    if (/finished and its result is on the branch/i.test(content)) {
+      return {
+        kind: 'completed',
+        label: 'Delegate Wave completed',
+        body: 'Delegated work finished. Hermes was woken to collect the result.'
+      };
+    }
+    if (/has a finished, validated candidate/i.test(content)) {
+      return {
+        kind: 'ready',
+        label: 'Delegate Wave result ready',
+        body: 'A validated result is ready for review. Hermes was woken to collect it.'
+      };
+    }
+    if (/delegate-wave session[\s\S]* failed\./i.test(content)) {
+      var failure = content.match(/failed\.\s*(?:\n+([\s\S]*?))?(?:\n+Use session_poll|\n+\[delegate-wave-wake:|$)/i);
+      return {
+        kind: 'failed',
+        label: 'Delegate Wave stopped',
+        body: failure && String(failure[1] || '').trim() ||
+          'The delegated task stopped before it could finish. Hermes was notified.'
+      };
+    }
+    return {
+      kind: 'update',
+      label: 'Delegate Wave update',
+      body: 'Hermes received an update from the delegated task.'
+    };
+  }
+
   function applyDesktopHistory(owner, value) {
     var remoteSession = value.session || {};
     sidebarMode = 'desktop';
@@ -2847,12 +2924,17 @@
     var thread = {
       conversationId: owner.conversationId,
       messages: (Array.isArray(value.messages) ? value.messages : []).map(function (message) {
+        var wake = delegateWaveWakePresentation(message);
         var mapped = {
-          role: message.role,
-          content: String(message.content || ''),
+          role: wake ? 'assistant' : message.role,
+          content: wake ? wake.body : String(message.content || ''),
           _ts: Number(message.timestamp) || Date.now() / 1000,
           _computer: true
         };
+        if (wake) {
+          mapped._source = 'delegate_wave_wake';
+          mapped._delegateWaveWake = wake;
+        }
         if (Array.isArray(message.tool_calls)) {
           mapped.tool_calls = message.tool_calls;
         }
@@ -2943,6 +3025,10 @@
     }
     if (owner.kind === 'bind') {
       var remoteSession = applyDesktopHistory(owner, value);
+      if (sidebarState === 'Loading conversation…' ||
+          sidebarState === 'Preparing this Desktop conversation…') {
+        showPickerState('', false);
+      }
       if (!owner.silent) {
         closeDesktopSessions();
         closeSidebarIfOpen();
@@ -3429,6 +3515,12 @@
     });
     setSidebarMode('phone');
     updateTargetUi();
+    started = true;
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) refreshDesktopConversationOnForeground();
+    });
+    window.addEventListener('pageshow', refreshDesktopConversationOnForeground);
+    window.addEventListener('focus', refreshDesktopConversationOnForeground);
     setInterval(function () {
       var current = activeSessionId();
       if (current && current !== lastActiveSessionId &&
@@ -3450,14 +3542,15 @@
       var normalPending = Object.keys(pending).some(function (id) {
         return pending[id] && !pending[id].kind;
       });
-      if (isDesktopConversation(current) && binding && !normalPending &&
-          !hasPendingControl('bind') && Date.now() - lastDesktopSync > 20000) {
+      if (!document.hidden && isDesktopConversation(current) && binding && !normalPending &&
+          !hasPendingControl('bind') && Date.now() - lastDesktopSync > 5000) {
         bindDesktopSession(binding.id, true);
       }
       expireStaleControls();
       pollComputer();
     }, 1500);
     setTimeout(pollComputer, 400);
+    setTimeout(refreshDesktopConversationOnForeground, 600);
   }
 
   if (document.readyState === 'loading') {

@@ -16033,6 +16033,7 @@ function renderMessages(options){
       }
     }
     const isProcessWakeup=m&&m._source==='process_wakeup';
+    const isDelegateWaveWake=m&&m._source==='delegate_wave_wake';
     const isUser=m.role==='user';
     if(!isUser&&_isMarkerOnlyAssistantCompressionMessage(m)){
       content='**Error:** No response received after context compression. Please retry.';
@@ -16137,6 +16138,45 @@ function renderMessages(options){
         row.dataset.messageAnchorKey=_messageViewportAnchorKeyForMessage(m);
         row.dataset.role='process_wakeup';
         row.dataset.rawText=processText;
+        row.innerHTML=nextRowHtml;
+      }
+      inner.appendChild(row);
+      userRows.set(rawIdx, row);
+      continue;
+    }
+
+    if(isDelegateWaveWake){
+      currentAssistantTurn=null;
+      let row=_msgNodeRecycleEnabled?_recycleStash.get(rawIdx):null;
+      if(row&&(!row.classList.contains('msg-row')||row.classList.contains('assistant-turn'))) row=null;
+      const wake=m._delegateWaveWake||{};
+      const wakeKind=String(wake.kind||'update');
+      const wakeLabel=String(wake.label||'Delegate Wave update');
+      const wakeText=String(rowDisplayContent||'').trim();
+      const wakeFootHtml=`<div class="msg-foot">${timeHtml}<span class="msg-actions">${copyBtn}</span></div>`;
+      const wakeIcon=wakeKind==='completed'||wakeKind==='ready'?'check':wakeKind==='failed'?'alert-triangle':'git-branch';
+      const nextRowHtml=`<div class="delegate-wave-wake-notice" data-wake-kind="${esc(wakeKind)}"><div class="delegate-wave-wake-icon">${li(wakeIcon,15)}</div><div class="delegate-wave-wake-content"><div class="delegate-wave-wake-label">${esc(wakeLabel)}</div><div class="msg-body delegate-wave-wake-body">${bodyHtml}</div>${wakeFootHtml}</div></div>`;
+      if(row){
+        row.className='msg-row delegate-wave-wake-row';
+        row.id=_userMessageDomId(rawIdx);
+        row.dataset.msgIdx=rawIdx;
+        row.dataset.sessionMsgIdx=_messageSessionIndexForRawIdx(rawIdx);
+        row.dataset.messageAnchorKey=_messageViewportAnchorKeyForMessage(m);
+        row.dataset.role='delegate_wave_wake';
+        delete row.dataset.editing;
+        if(row.dataset.rawText!==wakeText||row.innerHTML!==nextRowHtml){
+          row.dataset.rawText=wakeText;
+          row.innerHTML=nextRowHtml;
+        }
+      }else{
+        row=document.createElement('div');
+        row.className='msg-row delegate-wave-wake-row';
+        row.id=_userMessageDomId(rawIdx);
+        row.dataset.msgIdx=rawIdx;
+        row.dataset.sessionMsgIdx=_messageSessionIndexForRawIdx(rawIdx);
+        row.dataset.messageAnchorKey=_messageViewportAnchorKeyForMessage(m);
+        row.dataset.role='delegate_wave_wake';
+        row.dataset.rawText=wakeText;
         row.innerHTML=nextRowHtml;
       }
       inner.appendChild(row);
