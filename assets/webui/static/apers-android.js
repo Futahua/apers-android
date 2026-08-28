@@ -116,29 +116,134 @@
     return bindingDevice(sessionId) || defaultDeviceId();
   }
 
-  // The pill carries the state; there is no separate status line to read. It
-  // stays HIDDEN until a computer is bound, because the policy it writes lives
-  // on that computer -- a pill offering to route repository changes with
-  // nowhere to route them is a lie in the shape of a button.
-  var delegationOn = false;
+  // DELEGATION STATE: PER COMPUTER, DESIRED vs CONFIRMED.
+  //
+  // Two facts per PC, and conflating them is what made this flaky:
+  //
+  //   confirmed  the last value that PC actually proved
+  //   desired    what the user has asked for since
+  //
+  // A tap changes `desired` and never blocks. If no write is running it sends one; if a write is
+  // already running it just records the newer intent, and the write that is in flight sends the
+  // follow-up when it lands. So a double tap is two intents and at most two writes, never a
+  // swallowed one.
+  //
+  // Generations make late replies harmless without any timing assumption. Every write takes the
+  // next `writeGen`; a reply is only believed if it belongs to the write still in flight. A GET may
+  // update `confirmed`, but must never touch `desired` -- that is the rule that stops a read issued
+  // before the tap from landing after it and undoing it.
+  //
+  // The earlier version used a timestamped in-flight guard and a validity window. That made
+  // correctness depend on a reply arriving inside 8 seconds, which is not a property this has: one
+  // lost reply wedged the control permanently, and after loosening it, a slow read could still
+  // clobber a fresh tap. Timeout now means only "certainty lost, reconcile with a fresh GET".
+  var delegationByDevice = {};
+  var delegationLastTarget = '';
+  var delegationWriteGen = 0;
 
-  function renderDelegationToggle(value, loading, deviceId) {
+  function delegationEntry(deviceId) {
+    if (!delegationByDevice[deviceId]) {
+      delegationByDevice[deviceId] = {
+        confirmed: null, desired: null, inFlight: null, lastWriteGen: 0,
+      };
+    }
+    return delegationByDevice[deviceId];
+  }
+
+  // What the pill should show: the user's intent if they have expressed one, otherwise the last
+  // thing the PC proved. Showing `confirmed` while a different `desired` is on its way would make
+  // the pill flick back and forth under the user's finger.
+  function delegationStateFor(deviceId) {
+    var entry = delegationEntry(deviceId);
+    if (entry.desired !== null) return entry.desired === true;
+    return entry.confirmed === true;
+  }
+
+  function delegationBusy(deviceId) {
+    return !!delegationEntry(deviceId).inFlight;
+  }
+
+  function renderDelegationToggle(_value, loading, deviceId) {
     var pill = document.getElementById('apersDelegationPill');
     var label = document.getElementById('apersDelegationPillLabel');
     if (!pill || !label) return;
-    if (!deviceId) { pill.hidden = true; return; }
+
+    var target = delegationTargetDevice();
+    if (!target) { pill.hidden = true; return; }
+    // A reply about a device that is not on screen updates that device's row and paints nothing.
+    if (deviceId && deviceId !== target) return;
+
+    var entry = delegationEntry(target);
+    var on = delegationStateFor(target);
+    var busy = !!loading || !!entry.inFlight;
     pill.hidden = false;
-    if (typeof value === 'boolean') delegationOn = value;
-    pill.disabled = !!loading;
-    pill.classList.toggle('is-on', delegationOn);
-    pill.classList.toggle('is-loading', !!loading);
-    pill.setAttribute('aria-pressed', delegationOn ? 'true' : 'false');
-    label.textContent = delegationOn ? 'Delegated' : 'Delegate';
-    var where = peerLabel(deviceId);
-    pill.title = loading ? 'Reading ' + where + '…' :
-      delegationOn ? 'Repository changes go to Delegate Wave on ' + where + ' — tap to let Hermes edit directly'
-                   : 'Hermes edits repositories directly on ' + where + ' — tap to route changes to Delegate Wave';
+    // NEVER disabled for a read. A disabled pill is a swallowed tap with a nicer face; the tap is
+    // always accepted and the intent queued.
+    pill.disabled = false;
+    pill.classList.toggle('is-on', on);
+    pill.classList.toggle('is-loading', busy);
+    pill.setAttribute('aria-pressed', on ? 'true' : 'false');
+    label.textContent = on ? 'Delegated' : 'Delegate';
+    var where = peerLabel(target);
+    pill.title = busy ? (on ? 'Turning routing on for ' : 'Turning routing off for ') + where + '\u2026' :
+      on ? 'Repository changes go to Delegate Wave on ' + where + ' \u2014 tap to let Hermes edit directly'
+         : 'Hermes edits repositories directly on ' + where + ' \u2014 tap to route changes to Delegate Wave';
     pill.setAttribute('aria-label', pill.title);
+  }
+
+  // A GET landed. It may correct `confirmed`; it may not touch `desired`, and it is ignored
+  // entirely while a write is in flight, because the PC is about to be told something newer.
+  function applyDelegationRead(deviceId, value, issuedGen) {
+    if (!deviceId || typeof value !== 'boolean') return;
+    var entry = delegationEntry(deviceId);
+    delegationReadAt = Date.now();
+    if (entry.inFlight) return;
+    // A read ISSUED BEFORE A WRITE can still land AFTER that write completed, when there is no
+    // in-flight write left to guard it -- and believing it would repaint the value the user just
+    // changed. Reads therefore carry the generation they were issued at, and one older than the
+    // last completed write is describing a world that no longer exists.
+    if (issuedGen !== undefined && issuedGen < entry.lastWriteGen) return;
+    entry.confirmed = value;
+    if (entry.desired !== null && entry.desired === value) entry.desired = null;
+    renderDelegationToggle(undefined, false, deviceId);
+  }
+
+  // A SET landed. Only the write still in flight may settle the value: an older generation's reply
+  // is about a value the user has already moved past.
+  function applyDelegationWrite(deviceId, value, gen) {
+    if (!deviceId) return;
+    var entry = delegationEntry(deviceId);
+    if (!entry.inFlight || (gen !== undefined && entry.inFlight.gen !== gen)) return;
+    if (typeof value === 'boolean') entry.confirmed = value;
+    entry.lastWriteGen = entry.inFlight.gen;
+    entry.inFlight = null;
+    if (entry.desired !== null && entry.desired === entry.confirmed) entry.desired = null;
+    renderDelegationToggle(undefined, false, deviceId);
+    // The user moved again while this was in the air. Send the newer intent now.
+    if (entry.desired !== null && entry.desired !== entry.confirmed) sendDelegationWrite(deviceId);
+  }
+
+  // Certainty lost rather than value known: drop the in-flight write and reconcile with a read.
+  function abandonDelegationWrite(deviceId) {
+    if (!deviceId) return;
+    delegationEntry(deviceId).inFlight = null;
+    renderDelegationToggle(undefined, false, deviceId);
+    requestDelegationState();
+  }
+
+  function sendDelegationWrite(deviceId) {
+    var entry = delegationEntry(deviceId);
+    if (entry.inFlight || entry.desired === null) return;
+    delegationWriteGen += 1;
+    var gen = delegationWriteGen;
+    entry.inFlight = { gen: gen, value: entry.desired };
+    // A write supersedes any read still outstanding: its answer is about to be wrong.
+    dropControlRequests('delegation-get');
+    renderDelegationToggle(undefined, true, deviceId);
+    dispatchControl(CONTROL_DELEGATION_SET_ID, 'delegation-set',
+      CONTROL_DELEGATION_SET_PROMPT + '\n' + JSON.stringify({
+        conversation_id: 'delegation-settings', route_repo_changes: !!entry.desired
+      }), '__desktop_settings__', { deviceId: deviceId, gen: gen });
   }
 
   function requestDelegationState() {
@@ -147,19 +252,46 @@
       renderDelegationToggle(undefined, false, deviceId);
       return;
     }
-    if (hasPendingControl('list') || hasPendingControl('delegation-set')) return;
-    renderDelegationToggle(undefined, true, deviceId);
-    requestDesktopSessions('__desktop_settings__', deviceId);
+    // Reading on top of a write would only produce an answer we are about to invalidate.
+    if (delegationBusy(deviceId) || hasPendingControl('delegation-get')) return;
+    // A background poll must never raise the "computer is unreachable" picker state --
+    // dispatchControl does that on a dead link, and this runs on a timer. A known-offline peer
+    // keeps its last value and simply stops refreshing.
+    if (offlinePeers[deviceId] || !refreshLinkStatus(deviceId)) {
+      renderDelegationToggle(undefined, false, deviceId);
+      return;
+    }
+    // The dedicated read. This used to call requestDesktopSessions(), which fetches the whole
+    // Desktop session catalogue -- a full list round trip on every refresh to learn one boolean,
+    // and one that also drives sidebar list rendering. The delegation-get control already existed
+    // and handleControlResult already understood it; nothing was using it.
+    dispatchControl(CONTROL_DELEGATION_GET_ID, 'delegation-get',
+      CONTROL_DELEGATION_GET_PROMPT + '\n' + JSON.stringify({
+        conversation_id: 'delegation-settings'
+      }), '__desktop_settings__',
+      { deviceId: deviceId, silent: true, gen: delegationWriteGen });
   }
 
+  // Called when the visible conversation -- and so possibly the target computer -- changes. Each
+  // PC keeps its own row, so switching repaints from that PC's own state rather than carrying the
+  // previous machine's answer across.
+  function syncDelegationTarget() {
+    var target = delegationTargetDevice();
+    if (target === delegationLastTarget) return;
+    delegationLastTarget = target;
+    delegationReadAt = 0;
+    renderDelegationToggle(undefined, false, target);
+    if (target) requestDelegationState();
+  }
+
+  // The tap. Always accepted: it records intent and returns.
   function setDelegationState(enabled) {
     var deviceId = delegationTargetDevice();
-    if (!deviceId || hasPendingControl('delegation-get') || hasPendingControl('delegation-set')) return;
-    renderDelegationToggle(enabled, true, deviceId);
-    dispatchControl(CONTROL_DELEGATION_SET_ID, 'delegation-set',
-      CONTROL_DELEGATION_SET_PROMPT + '\n' + JSON.stringify({
-        conversation_id: 'delegation-settings', route_repo_changes: !!enabled
-      }), '__desktop_settings__', { deviceId: deviceId });
+    if (!deviceId) return;
+    var entry = delegationEntry(deviceId);
+    entry.desired = !!enabled;
+    renderDelegationToggle(undefined, false, deviceId);
+    if (!entry.inFlight) sendDelegationWrite(deviceId);
   }
 
   function markPeerSeen(deviceId) {
@@ -2706,6 +2838,7 @@
       if (control.created && now - control.created <= CONTROL_TIMEOUT_MS) return;
       delete controlRequests[conversation];
       expired = true;
+      if (control.kind === 'delegation-set') abandonDelegationWrite(control.deviceId);
       if (control.kind === 'bind' && !control.silent) expiredBind = control;
     });
     Object.keys(pending).forEach(function (id) {
@@ -2714,6 +2847,8 @@
       if (owner.created && now - owner.created <= CONTROL_TIMEOUT_MS) return;
       delete pending[id];
       expired = true;
+      // Timeout means certainty lost, not value known: drop the write and reconcile with a read.
+      if (owner.kind === 'delegation-set') abandonDelegationWrite(owner.deviceId);
       if (owner.kind === 'bind' && !owner.silent) expiredBind = owner;
     });
     if (!expired) return;
@@ -2795,12 +2930,6 @@
       pending[String(event.id)] = control;
       writeJson(PENDING_KEY, pending);
       updateTargetUi();
-      if (control.kind === 'delegation-set') {
-        window.setTimeout(function () {
-          dropControlRequests('delegation-set');
-          requestDelegationState();
-        }, 700);
-      }
       return;
     }
     var dispatch = event && event.conversation_id
@@ -2875,8 +3004,7 @@
           try {
             var orphanControl = JSON.parse(unwrapComputerResult(result.text || '') || '{}');
             if (typeof orphanControl.route_repo_changes === 'boolean') {
-              delegationReadAt = Date.now();
-              renderDelegationToggle(orphanControl.route_repo_changes, false, deviceId);
+              applyDelegationRead(deviceId, orphanControl.route_repo_changes);
             }
           } catch (_) {}
           accepted.push(String(result.id));
@@ -3070,16 +3198,23 @@
           showPickerState(String(value.error || 'Desktop request failed.'), true);
         }
       }
-      if (owner.kind === 'delegation-get' || owner.kind === 'delegation-set') {
-        renderDelegationToggle(undefined, false, owner.deviceId);
+      if (owner.kind === 'delegation-set') {
+        // The write failed, so what the PC holds is unknown -- drop it and reconcile with a read
+        // rather than pretending either value is confirmed.
+        abandonDelegationWrite(owner.deviceId);
         if (typeof showToast === 'function') showToast('Could not update delegation on the computer.', 2800);
+      } else if (owner.kind === 'delegation-get') {
+        renderDelegationToggle(undefined, false, owner.deviceId);
       }
       return;
     }
-    if (owner.kind === 'delegation-get' || owner.kind === 'delegation-set') {
-      delegationReadAt = Date.now();
-      renderDelegationToggle(!!value.route_repo_changes, false, owner.deviceId);
-      if (owner.kind === 'delegation-set' && typeof showToast === 'function') {
+    if (owner.kind === 'delegation-get') {
+      applyDelegationRead(owner.deviceId, value.route_repo_changes, owner.gen);
+      return;
+    }
+    if (owner.kind === 'delegation-set') {
+      applyDelegationWrite(owner.deviceId, value.route_repo_changes, owner.gen);
+      if (typeof showToast === 'function') {
         showToast(value.route_repo_changes ? 'Repository changes will be delegated.' :
           'Hermes can change repository files directly.', 2600);
       }
@@ -3087,8 +3222,7 @@
     }
     if (owner.kind === 'list') {
       if (typeof value.route_repo_changes === 'boolean') {
-        delegationReadAt = Date.now();
-        renderDelegationToggle(value.route_repo_changes, false, owner.deviceId);
+        applyDelegationRead(owner.deviceId, value.route_repo_changes);
       }
       if (owner.deviceId) delete offlinePeers[owner.deviceId];
       // Only THIS device's sessions came back. Assigning them to desktopSessions
@@ -3611,7 +3745,9 @@
     var delegationPill = document.getElementById('apersDelegationPill');
     if (delegationPill) delegationPill.addEventListener('click', function () {
       if (delegationPill.disabled) return;
-      setDelegationState(!delegationOn);
+      // Read the target's own state at click time. Deriving this from a global
+      // was the bug: it could invert the wrong computer's value.
+      setDelegationState(!delegationStateFor(delegationTargetDevice()));
     });
     window.addEventListener('popstate', function () {
       if (pickerOpen) closeDesktopSessions(true);
@@ -3641,7 +3777,9 @@
       updateTargetUi();
       updateBusyPickerVisibility();
       refreshComputerPeers();
-      if (!document.hidden && Date.now() - delegationReadAt > 15000) requestDelegationState();
+      syncDelegationTarget();
+      if (!document.hidden && delegationTargetDevice() &&
+          Date.now() - delegationReadAt > 15000) requestDelegationState();
       var binding = activeBinding();
       var normalPending = Object.keys(pending).some(function (id) {
         return pending[id] && !pending[id].kind;
