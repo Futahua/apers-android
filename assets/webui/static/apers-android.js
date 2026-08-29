@@ -3079,6 +3079,9 @@
 
   function delegateWaveWakePresentation(message) {
     if (!message || message.role !== 'user') return null;
+    // The marker is correlation data, not authority. A person can paste identical prose into a
+    // conversation; only Hermes's durable typed timeline row authenticates a Delegate Wave event.
+    if (message.display_kind !== 'delegate_wave_wake') return null;
     var content = String(message.content || '');
     if (!/\[delegate-wave-wake:wake_[^\]]+\]/i.test(content)) return null;
     var taskMatch = content.match(/delegate-wave session working on "([^"]+)"/i);
@@ -3135,10 +3138,15 @@
       messages: (Array.isArray(value.messages) ? value.messages : []).map(function (message) {
         var wake = delegateWaveWakePresentation(message);
         var mapped = {
-          role: wake ? 'assistant' : message.role,
+          role: message.role,
           content: wake ? wake.body : String(message.content || ''),
           _ts: Number(message.timestamp) || Date.now() / 1000,
-          _computer: true
+          _computer: true,
+          // Preserve the Desktop/Hermes timeline identity instead of flattening it to prose. These
+          // fields survive phone persistence and make reloads render from the same durable event.
+          row_id: message.row_id == null ? undefined : message.row_id,
+          display_kind: message.display_kind == null ? undefined : String(message.display_kind),
+          display_metadata: message.display_metadata == null ? undefined : message.display_metadata
         };
         if (wake) {
           mapped._source = 'delegate_wave_wake';
